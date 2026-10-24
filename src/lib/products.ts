@@ -86,6 +86,20 @@ export async function getRelatedProducts(slug: string, categorySlug: string, lim
   return rows.map(toProduct);
 }
 
+/** Most recently added products first. */
+export async function getLatestProducts(limit = 24) {
+  "use cache";
+  cacheTag("products");
+  cacheLife("minutes");
+
+  const rows = await db.query.products.findMany({
+    with: withCategoryAndStock,
+    orderBy: (p, { desc }) => [desc(p.createdAt), desc(p.id)],
+    limit,
+  });
+  return rows.map(toProduct);
+}
+
 export async function getProductSlugs() {
   const rows = await db.select({ slug: products.slug }).from(products).orderBy(asc(products.id));
   return rows.map((row) => row.slug);
