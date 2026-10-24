@@ -1,0 +1,367 @@
+/*
+ * Reusable primitives as Tailwind utilities, so they compose with
+ * variants (md:, hover:, ...) and can be overridden by plain utilities.
+ */
+
+/*
+ * header-overlay: — applies while the page has a section marked
+ * `data-header-overlay` (e.g. a full-bleed hero) and the header
+ * hasn't scrolled yet, so it can sit transparently over the image.
+ */
+@custom-variant header-overlay (body:has([data-header-overlay]) &:not([data-scrolled]));
+
+/* ---------- Layout ---------- */
+
+/* Centred page width with responsive side gutters. */
+@utility container-page {
+  width: 100%;
+  max-width: var(--container-page);
+  margin-inline: auto;
+  padding-inline: var(--spacing-gutter);
+}
+
+@utility container-content {
+  width: 100%;
+  max-width: var(--container-content);
+  margin-inline: auto;
+  padding-inline: var(--spacing-gutter);
+}
+
+@utility container-text {
+  width: 100%;
+  max-width: var(--container-text);
+  margin-inline: auto;
+  padding-inline: var(--spacing-gutter);
+}
+
+/* Vertical rhythm between homepage / editorial sections. */
+@utility section {
+  padding-block: var(--spacing-section);
+}
+
+@utility section-sm {
+  padding-block: var(--spacing-section-sm);
+}
+
+/* Product listing: 2 → 3 → 4 columns, near-gapless images, room for text below. */
+@utility grid-products {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 2px;
+  row-gap: 2.5rem;
+
+  @variant md {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  @variant lg {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    row-gap: 3.5rem;
+  }
+}
+
+/* Editorial split: stacks on mobile, two-up from md. */
+@utility grid-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+
+  @variant md {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Horizontal carousel with snap; next slide peeks on small screens. */
+@utility rail {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 72%;
+  gap: 2px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: var(--spacing-gutter);
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+  & > * {
+    scroll-snap-align: start;
+  }
+
+  @variant md {
+    grid-auto-columns: 40%;
+  }
+  @variant lg {
+    grid-auto-columns: 25%;
+  }
+}
+
+/* Scrollable but without a visible scrollbar (swipe galleries). */
+@utility no-scrollbar {
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Image frame for products: neutral backdrop, fixed ratio, cover crop. */
+@utility media-product {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: var(--aspect-product);
+  background-color: var(--color-canvas);
+
+  & > img,
+  & > video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+}
+
+/*
+ * Full-bleed hero sized by viewport height, leaving room for overlaid
+ * copy without covering the subject. (Heights rather than aspect-ratio:
+ * a min-height combined with aspect-ratio would widen the box.)
+ */
+@utility media-hero {
+  position: relative;
+  overflow: hidden;
+  height: 85svh;
+  min-height: 32rem;
+  background-color: var(--color-canvas);
+
+  & > img,
+  & > video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  @variant md {
+    height: 70svh;
+  }
+  @variant lg {
+    height: 100svh;
+  }
+}
+
+/* ---------- Typography ---------- */
+
+@utility display {
+  font-family: var(--font-display);
+  font-size: var(--text-display);
+  line-height: var(--text-display--line-height);
+  letter-spacing: var(--text-display--letter-spacing);
+  font-weight: 400;
+}
+
+@utility display-sm {
+  font-family: var(--font-display);
+  font-size: var(--text-display-sm);
+  line-height: var(--text-display-sm--line-height);
+  letter-spacing: var(--text-display-sm--letter-spacing);
+  font-weight: 400;
+}
+
+@utility heading {
+  font-family: var(--font-display);
+  font-size: var(--text-heading);
+  line-height: var(--text-heading--line-height);
+  font-weight: 400;
+}
+
+/* Small uppercase label above headings, on badges, in nav. */
+@utility eyebrow {
+  font-family: var(--font-sans);
+  font-size: var(--text-micro);
+  line-height: var(--text-micro--line-height);
+  letter-spacing: var(--tracking-caps-wide);
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+/* Uppercase UI label: nav items, filter names, tabs. */
+@utility label-caps {
+  font-family: var(--font-sans);
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+/* ---------- Links ---------- */
+
+/* Inline text link: always underlined, underline thins out on hover. */
+@utility link {
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.25em;
+  transition-property: text-decoration-color, color;
+
+  @variant hover {
+    text-decoration-color: var(--color-subtle);
+  }
+}
+
+/* Quiet link (nav, footer, cards): underline appears on hover. */
+@utility link-quiet {
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.25em;
+  text-decoration-color: transparent;
+  transition-property: text-decoration-color, color;
+
+  @variant hover {
+    text-decoration-color: currentColor;
+  }
+}
+
+/* ---------- Buttons ---------- */
+/* Usage: class="btn btn-primary" — add w-full for full-width mobile CTAs. */
+
+@utility btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 3rem; /* 48px touch target */
+  padding-inline: 2rem;
+  border: 1px solid transparent;
+  border-radius: 0;
+  font-family: var(--font-sans);
+  font-size: var(--text-caption);
+  line-height: 1;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition-property: background-color, border-color, color;
+
+  &:disabled,
+  &[aria-disabled="true"] {
+    cursor: not-allowed;
+    background-color: var(--color-canvas);
+    border-color: var(--color-line);
+    color: var(--color-subtle);
+  }
+}
+
+@utility btn-sm {
+  min-height: 2.5rem;
+  padding-inline: 1.25rem;
+}
+
+/* Solid ink — one per view, the main action. */
+@utility btn-primary {
+  background-color: var(--color-ink);
+  border-color: var(--color-ink);
+  color: var(--color-paper);
+
+  @variant hover {
+    &:not(:disabled, [aria-disabled="true"]) {
+      background-color: var(--color-ink-hover);
+      border-color: var(--color-ink-hover);
+    }
+  }
+}
+
+/* Hairline outline — secondary actions. */
+@utility btn-secondary {
+  background-color: transparent;
+  border-color: var(--color-ink);
+  color: var(--color-ink);
+
+  @variant hover {
+    &:not(:disabled, [aria-disabled="true"]) {
+      background-color: var(--color-ink);
+      color: var(--color-paper);
+    }
+  }
+}
+
+/* For use on dark imagery or ink sections. */
+@utility btn-inverse {
+  background-color: var(--color-paper);
+  border-color: var(--color-paper);
+  color: var(--color-ink);
+
+  @variant hover {
+    &:not(:disabled, [aria-disabled="true"]) {
+      background-color: transparent;
+      color: var(--color-paper);
+    }
+  }
+}
+
+/* Hairline white outline — secondary action on dark imagery. */
+@utility btn-secondary-inverse {
+  background-color: transparent;
+  border-color: var(--color-paper);
+  color: var(--color-paper);
+
+  @variant hover {
+    &:not(:disabled, [aria-disabled="true"]) {
+      background-color: var(--color-paper);
+      color: var(--color-ink);
+    }
+  }
+}
+
+/* Icon-only square button (search, bag, wishlist). Needs an aria-label. */
+@utility btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  color: inherit;
+  cursor: pointer;
+  transition-property: opacity;
+
+  @variant hover {
+    opacity: 0.6;
+  }
+}
+
+/* ---------- Borders & forms ---------- */
+
+@utility hairline-t {
+  border-top: 1px solid var(--color-line);
+}
+
+@utility hairline-b {
+  border-bottom: 1px solid var(--color-line);
+}
+
+/* Text input / select / textarea: square 1px box, ink border on focus. */
+@utility field {
+  display: block;
+  width: 100%;
+  min-height: 3rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-line);
+  border-radius: 0;
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  font-size: 1rem; /* 16px stops iOS zooming on focus */
+  line-height: 1.5rem;
+  transition-property: border-color;
+
+  &:focus {
+    outline: none;
+    border-color: var(--color-ink);
+  }
+  &[aria-invalid="true"] {
+    border-color: var(--color-sale);
+  }
+}

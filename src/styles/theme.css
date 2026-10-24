@@ -1,0 +1,94 @@
+/*
+ * Design tokens. Everything here becomes a Tailwind utility
+ * (e.g. --color-ink → text-ink / bg-ink / border-ink).
+ *
+ * Principles: neutral UI that lets photography carry the colour,
+ * square corners, hairline borders, no shadows, generous section rhythm.
+ */
+
+@theme {
+  /* Colour: drop Tailwind's default palette so only these tokens exist. */
+  --color-*: initial;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+  --color-white: #ffffff;
+  --color-black: #000000;
+
+  --color-paper: #ffffff; /* page background */
+  --color-canvas: #f5f4f2; /* product image backdrop, subtle panels */
+  --color-ink: #111111; /* primary text, primary buttons */
+  --color-ink-hover: #333333;
+  --color-muted: #6b6b6b; /* secondary text — 5.3:1 on paper */
+  --color-subtle: #a3a3a3; /* disabled / placeholder only, never body text */
+  --color-line: #e3e3e3; /* hairline dividers, field borders */
+  --color-line-strong: #111111;
+  --color-sale: #a8231b;
+  --color-success: #2f6a3f;
+
+  /* Type families (values come from next/font, see the inline block below). */
+  --font-*: initial;
+
+  /* Type scale. Small, tracked UI text; large, fluid display serif. */
+  --text-micro: 0.6875rem; /* 11px — eyebrows, badges */
+  --text-micro--line-height: 1rem;
+  --text-micro--letter-spacing: 0.14em;
+  --text-caption: 0.75rem; /* 12px — nav, buttons, meta */
+  --text-caption--line-height: 1rem;
+  --text-caption--letter-spacing: 0.1em;
+  --text-body-sm: 0.8125rem; /* 13px — product name, price */
+  --text-body-sm--line-height: 1.25rem;
+  --text-body: 0.875rem; /* 14px — default body */
+  --text-body--line-height: 1.5rem;
+  --text-body-lg: 1rem;
+  --text-body-lg--line-height: 1.625rem;
+  --text-heading-sm: 1.25rem;
+  --text-heading-sm--line-height: 1.3;
+  --text-heading: clamp(1.5rem, 1.25rem + 1vw, 2rem);
+  --text-heading--line-height: 1.2;
+  --text-display-sm: clamp(2rem, 1.4rem + 2.5vw, 3.5rem);
+  --text-display-sm--line-height: 1.1;
+  --text-display-sm--letter-spacing: -0.01em;
+  --text-display: clamp(2.5rem, 1.25rem + 5vw, 6rem);
+  --text-display--line-height: 1;
+  --text-display--letter-spacing: -0.02em;
+
+  --tracking-caps: 0.12em;
+  --tracking-caps-wide: 0.2em;
+
+  /* Spacing: keep the 4px base, add semantic fluid steps. */
+  --spacing-gutter: clamp(1rem, 0.5rem + 2vw, 2.5rem); /* page side padding */
+  --spacing-section: clamp(4rem, 2.75rem + 5vw, 7.5rem); /* between sections */
+  --spacing-section-sm: clamp(2.5rem, 2rem + 2.5vw, 4rem);
+  --spacing-header: 3.5rem;
+
+  /* Containers (max-w-page, max-w-content, ...). */
+  --container-page: 90rem; /* 1440px — full layout */
+  --container-content: 75rem; /* 1200px — text-led sections, PDP */
+  --container-text: 40rem; /* readable copy (max-w-prose is Tailwind's fixed 65ch) */
+  --container-narrow: 28rem; /* forms: sign-in, newsletter */
+
+  /* Shape: square corners and no shadows. rounded-full stays for dots/badges. */
+  --radius-*: initial;
+  --radius-full: 9999px;
+  --shadow-*: initial;
+  --inset-shadow-*: initial;
+  --drop-shadow-*: initial;
+
+  /* Media ratios. */
+  --aspect-product: 3 / 4;
+  --aspect-portrait: 4 / 5;
+  --aspect-landscape: 3 / 2;
+  --aspect-hero: 16 / 9;
+
+  /* Motion: short and calm. */
+  --ease-luxe: cubic-bezier(0.2, 0, 0, 1);
+  --default-transition-duration: 200ms;
+  --default-transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Fonts are injected as CSS variables on <html> by next/font in layout.tsx. */
+@theme inline {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-bodoni-moda), ui-serif, Georgia, serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
