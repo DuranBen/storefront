@@ -100,6 +100,31 @@ export async function getLatestProducts(limit = 24) {
   return rows.map(toProduct);
 }
 
+/** A category and its products, or undefined if the slug doesn't exist. */
+export async function getCategory(slug: string) {
+  "use cache";
+  cacheTag("products");
+  cacheLife("minutes");
+
+  const category = await db.query.categories.findFirst({ where: eq(categories.slug, slug) });
+  if (!category) return undefined;
+
+  const rows = await db.query.products.findMany({
+    where: eq(products.categoryId, category.id),
+    with: withCategoryAndStock,
+    orderBy: (p, { asc }) => [asc(p.id)],
+  });
+  return { slug: category.slug, name: category.name, products: rows.map(toProduct) };
+}
+
+export async function getCategorySlugs() {
+  const rows = await db
+    .select({ slug: categories.slug })
+    .from(categories)
+    .orderBy(asc(categories.id));
+  return rows.map((row) => row.slug);
+}
+
 export async function getProductSlugs() {
   const rows = await db.select({ slug: products.slug }).from(products).orderBy(asc(products.id));
   return rows.map((row) => row.slug);
