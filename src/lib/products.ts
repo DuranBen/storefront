@@ -2,11 +2,11 @@
 // Every read is cached under the "products" tag; stock is shown on cards,
 // so the lifetime is kept short. Revalidate the tag after stock changes.
 
-import { asc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
 import { cacheLife, cacheTag } from "next/cache";
 import { db } from "@/db";
 import { categories, products, stock } from "@/db/schema";
-import type { Product } from "./catalog";
+import { MAX_SEARCH_LENGTH, type Product } from "./catalog";
 
 const withCategoryAndStock = {
   category: true,
@@ -115,6 +115,48 @@ export async function getCategory(slug: string) {
     orderBy: (p, { asc }) => [asc(p.id)],
   });
   return { slug: category.slug, name: category.name, products: rows.map(toProduct) };
+}
+
+/**
+ * Products matching every word of `query` in their name, colour, category or
+ * description. Name matches rank first.
+ */
+export async function searchProducts(query: string, limit = 48) {
+  "use cache";
+  cacheTag("products");
+  cacheLife("minutes");
+
+  const terms = query.slice(0, MAX_SEARCH_LENGTH).trim().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return [];
+
+  // Escape LIKE wildcards so "%" and "_" in the query match literally.
+  const pattern = (text: string) => `%${text.replace(/[\\%_]/g, "\\$&")}%`;
+
+  const rows = await db.query.products.findMany({
+    where: and(
+      ...terms.map((term) =>
+        or(
+          ilike(products.name, pattern(term)),
+          ilike(products.colour, pattern(term)),
+          ilike(products.description, pattern(term)),
+          inArray(
+            products.categoryId,
+            db
+              .select({ id: categories.id })
+              .from(categories)
+              .where(ilike(categories.name, pattern(term))),
+          ),
+        ),
+      ),
+    ),
+    with: withCategoryAndStock,
+    orderBy: (p, { asc }) => [
+      sql`${and(...terms.map((term) => ilike(p.name, pattern(term))))} desc`,
+      asc(p.id),
+    ],
+    limit,
+  });
+  return rows.map(toProduct);
 }
 
 export async function getCategorySlugs() {

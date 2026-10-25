@@ -81,6 +81,9 @@ export function formatPrice(amount: number) {
   return priceFormat.format(amount);
 }
 
+/** Longest search query we act on; anything past this is ignored. */
+export const MAX_SEARCH_LENGTH = 100;
+
 export const hero = {
   eyebrow: "Autumn–Winter 2026",
   title: "The Quiet Season",
