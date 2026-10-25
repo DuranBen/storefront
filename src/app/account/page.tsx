@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Suspense } from "react";
-import { signOut } from "@/lib/auth-actions";
+import { DetailsList, DetailsSkeleton } from "@/components/account/details-list";
 import { requireUser } from "@/lib/session";
 
 export const metadata: Metadata = {
@@ -8,58 +9,54 @@ export const metadata: Metadata = {
   robots: { index: false },
 };
 
-const dateFormat = new Intl.DateTimeFormat("en-GB", { dateStyle: "long" });
-
 // Signed-out visitors are redirected by src/proxy.ts; requireUser() is the
 // real check (against the database), inside Suspense as Cache Components needs.
-export default function AccountPage() {
+export default function AccountOverviewPage() {
   return (
-    <main className="flex-1">
-      <div className="container-text section">
-        <p className="eyebrow text-center text-muted">Atelier</p>
-        <h1 className="display-sm mt-3 text-center">My account</h1>
-        <Suspense fallback={<AccountSkeleton />}>
-          <AccountDetails />
-        </Suspense>
-      </div>
-    </main>
+    <Suspense fallback={<OverviewSkeleton />}>
+      <Overview />
+    </Suspense>
   );
 }
 
-async function AccountDetails() {
+async function Overview() {
   const user = await requireUser("/account");
+  const firstName = user.name.split(/\s+/)[0];
 
   return (
-    <div className="mx-auto mt-12 max-w-md">
-      <dl className="hairline-t">
-        {[
-          ["Name", user.name],
-          ["Email", user.email],
-          ["Member since", dateFormat.format(user.createdAt)],
-        ].map(([label, value]) => (
-          <div key={label} className="flex justify-between gap-6 hairline-b py-4">
-            <dt className="label-caps text-muted">{label}</dt>
-            <dd className="min-w-0 text-right break-words">{value}</dd>
-          </div>
-        ))}
-      </dl>
+    <>
+      <h2 className="heading">Welcome back, {firstName}</h2>
+      <p className="mt-3 text-body-lg text-muted">
+        Review and update the details on your Atelier account.
+      </p>
 
-      <form action={signOut} className="mt-10">
-        <button type="submit" className="btn btn-secondary w-full">
-          Sign out
-        </button>
-      </form>
-    </div>
+      <section aria-labelledby="overview-details" className="mt-10">
+        <div className="flex items-baseline justify-between gap-6">
+          <h3 id="overview-details" className="label-caps">
+            Your details
+          </h3>
+          <Link href="/account/details" className="label-caps link shrink-0">
+            Edit
+          </Link>
+        </div>
+        <DetailsList user={user} className="mt-4" />
+      </section>
+
+      <Link href="/" className="btn btn-secondary mt-10 w-full sm:w-auto">
+        Continue shopping
+      </Link>
+    </>
   );
 }
 
-function AccountSkeleton() {
+function OverviewSkeleton() {
   return (
-    <div aria-busy="true" className="mx-auto mt-12 max-w-md animate-pulse space-y-4">
-      <div className="h-8 bg-canvas" />
-      <div className="h-8 bg-canvas" />
-      <div className="h-8 bg-canvas" />
-      <div className="mt-10 h-12 bg-canvas" />
+    <div aria-busy="true" aria-label="Loading your account" className="animate-pulse">
+      <div className="h-9 w-64 max-w-full bg-canvas" />
+      <div className="mt-4 h-5 w-80 max-w-full bg-canvas" />
+      <div className="mt-10">
+        <DetailsSkeleton />
+      </div>
     </div>
   );
 }

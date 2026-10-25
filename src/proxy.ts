@@ -39,8 +39,14 @@ async function rejectUnknownProduct(request: NextRequest) {
  * redirect to sign-in before anything streams. This only looks at the
  * cookie (proxy also runs on prefetches); pages verify the session against
  * the database with requireUser() / requireAdmin().
+ *
+ * Only page navigations are redirected. Server Actions POST to the page's
+ * URL and authorize themselves; answering one with a redirect to the
+ * sign-in HTML would break it silently instead of letting its own
+ * requireUser() redirect the client.
  */
 function requireSessionCookie(request: NextRequest) {
+  if (request.method !== "GET" && request.method !== "HEAD") return;
   if (getSessionCookie(request)) return;
 
   const { pathname, search } = request.nextUrl;
