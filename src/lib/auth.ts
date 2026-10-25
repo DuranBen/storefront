@@ -38,12 +38,45 @@ function assertStrongSecrets() {
 
 assertStrongSecrets();
 
+export const ROLES = ["customer", "admin"] as const;
+export type Role = (typeof ROLES)[number];
+
 export const auth = betterAuth({
   database: drizzleAdapter(db, { provider: "pg" }),
-  // Email verification isn't set up. The verify-email endpoint is mounted
-  // regardless and acts on any token signed with the secret, so keep it off
-  // until sendVerificationEmail is configured.
-  disabledPaths: ["/verify-email"],
+  emailAndPassword: {
+    enabled: true,
+    minPasswordLength: 10,
+    maxPasswordLength: 128,
+    autoSignIn: true,
+  },
+  user: {
+    additionalFields: {
+      // input: false, so neither sign-up nor update-user can set it. Admins
+      // are granted from the command line (npm run admin:grant).
+      role: { type: "string", required: false, defaultValue: "customer", input: false },
+    },
+  },
+  // 30-day sessions, extended at most once a day while in use.
+  session: { expiresIn: 60 * 60 * 24 * 30, updateAge: 60 * 60 * 24 },
+  rateLimit: {
+    // On in development too (the default is production only) so it can be
+    // tested. Stored in Postgres: in-memory counters are per server instance.
+    enabled: true,
+    storage: "database",
+    customRules: {
+      "/sign-in/email": { window: 60, max: 5 },
+      "/sign-up/email": { window: 60, max: 3 },
+    },
+  },
+  // Email isn't set up. These endpoints are mounted regardless, and
+  // verify-email acts on any token signed with the secret, so keep them off
+  // until verification and password reset are configured.
+  disabledPaths: [
+    "/verify-email",
+    "/send-verification-email",
+    "/request-password-reset",
+    "/reset-password",
+  ],
   // nextCookies must be the last plugin.
   plugins: [nextCookies()],
 });

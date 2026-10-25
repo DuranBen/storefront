@@ -1,8 +1,8 @@
 // Drizzle table definitions live here.
 //
-// Better Auth's tables (user, session, account, verification) can be generated with:
-//   npx @better-auth/cli generate --config src/lib/auth.ts --output src/db/auth-schema.ts
-// then re-exported from this file.
+// Better Auth's tables (user, session, account, verification, rate_limit) are
+// generated into ./auth-schema.ts and re-exported below, so drizzle-kit, `db`
+// and the Better Auth adapter all see them.
 
 import { relations, sql } from "drizzle-orm";
 import {
@@ -91,3 +91,5 @@ export const productsRelations = relations(products, ({ one, many }) => ({
 export const stockRelations = relations(stock, ({ one }) => ({
   product: one(products, { fields: [stock.productId], references: [products.id] }),
 }));
+
+export * from "./auth-schema";
