@@ -74,6 +74,7 @@ export function ProductDetails({ product }: { product: Product }) {
             <div className="mt-8">
               <PurchasePanel
                 key={product.slug}
+                slug={product.slug}
                 name={product.name}
                 sizes={product.sizes}
                 stock={product.stock}

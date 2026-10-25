@@ -1,26 +1,34 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { useState, useTransition } from "react";
+import { addToCart, type AddToCartResult } from "@/lib/cart-actions";
+import { notifyCartChange } from "@/lib/cart-cookie";
 import { stockState, type Product } from "@/lib/catalog";
 import { HeartIcon } from "../icons";
 import { StockStatus } from "./stock-status";
 
 /**
- * Size selection, stock state and the bag / wishlist actions.
- * Front-end only for now: nothing is persisted until the bag exists.
+ * Size selection, stock state and the bag / wishlist actions. Adding goes
+ * through the addToCart Server Action, which checks live stock; the stock
+ * shown here comes from the cached product and can be a few minutes old.
+ * The wishlist is still front-end only.
  */
 export function PurchasePanel({
+  slug,
   name,
   sizes,
   stock = 0,
 }: {
+  slug: string;
   name: string;
   sizes?: Product["sizes"];
   stock?: number;
 }) {
   const [size, setSize] = useState<string>();
   const [needsSize, setNeedsSize] = useState(false);
-  const [added, setAdded] = useState(false);
+  const [result, setResult] = useState<AddToCartResult | null>(null);
+  const [adding, startAdding] = useTransition();
   const [notify, setNotify] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -28,13 +36,24 @@ export function PurchasePanel({
   const totalUnits = sizes ? sizes.reduce((sum, s) => sum + s.stock, 0) : stock;
   const soldOut = totalUnits <= 0;
   const state = stockState(selected ? selected.stock : totalUnits);
+  const added = result?.status === "added" || result?.status === "limited";
+  const sizeLabel = selected ? `, size ${selected.label},` : "";
 
   const addToBag = () => {
     if (sizes && !selected) {
       setNeedsSize(true);
       return;
     }
-    setAdded(true);
+    startAdding(async () => {
+      let next: AddToCartResult;
+      try {
+        next = await addToCart({ slug, size: selected?.label ?? null });
+      } catch {
+        next = { status: "invalid", message: "We couldn't add this to your bag. Please try again." };
+      }
+      setResult(next);
+      if (next.status === "added" || next.status === "limited") notifyCartChange();
+    });
   };
 
   return (
@@ -58,7 +77,7 @@ export function PurchasePanel({
                     onChange={() => {
                       setSize(s.label);
                       setNeedsSize(false);
-                      setAdded(false);
+                      setResult(null);
                     }}
                     className="peer sr-only"
                   />
@@ -97,9 +116,17 @@ export function PurchasePanel({
             )}
           </>
         ) : (
-          <button type="button" onClick={addToBag} className="btn btn-primary w-full">
-            {added ? "Added to bag" : "Add to bag"}
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={addToBag}
+              disabled={adding}
+              className="btn btn-primary w-full"
+            >
+              {adding ? "Adding…" : added ? "Added to bag" : "Add to bag"}
+            </button>
+            {result && !adding && <AddResultMessage result={result} />}
+          </>
         )}
 
         <button
@@ -114,8 +141,43 @@ export function PurchasePanel({
       </div>
 
       <p role="status" className="sr-only">
-        {added ? `${name}${selected ? `, size ${selected.label},` : ""} added to your bag.` : ""}
+        {result?.status === "added" ? `${name}${sizeLabel} added to your bag.` : ""}
       </p>
     </div>
   );
+}
+
+function AddResultMessage({ result }: { result: AddToCartResult }) {
+  switch (result.status) {
+    case "added":
+      return (
+        <p className="py-1 text-center text-body-sm">
+          <Link href="/bag" className="link">
+            View bag
+          </Link>
+        </p>
+      );
+    case "limited":
+      return (
+        <p role="alert" className="py-1 text-center text-body-sm">
+          {result.max === 1 ? "Only 1 available" : `Only ${result.max} available`}, and
+          you have {result.quantity} in your bag.{" "}
+          <Link href="/bag" className="link">
+            View bag
+          </Link>
+        </p>
+      );
+    case "sold_out":
+      return (
+        <p role="alert" className="py-1 text-center text-body-sm text-sale">
+          Sorry, this has just sold out.
+        </p>
+      );
+    case "invalid":
+      return (
+        <p role="alert" className="py-1 text-center text-body-sm text-sale">
+          {result.message}
+        </p>
+      );
+  }
 }

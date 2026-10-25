@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRef, useSyncExternalStore } from "react";
+import { CART_CHANGE_EVENT, CART_COUNT_COOKIE, parseCount } from "@/lib/cart-cookie";
 import { menuLinks } from "@/lib/catalog";
 import {
   BagIcon,
@@ -11,6 +12,25 @@ import {
   SearchIcon,
   UserIcon,
 } from "./icons";
+
+function subscribeToCart(onChange: () => void) {
+  window.addEventListener(CART_CHANGE_EVENT, onChange);
+  // Another tab may have changed the bag.
+  window.addEventListener("focus", onChange);
+  return () => {
+    window.removeEventListener(CART_CHANGE_EVENT, onChange);
+    window.removeEventListener("focus", onChange);
+  };
+}
+
+/** Item count from the cart_count cookie, so the header never needs a server render. */
+const readCartCount = () =>
+  parseCount(
+    document.cookie
+      .split("; ")
+      .find((cookie) => cookie.startsWith(`${CART_COUNT_COOKIE}=`))
+      ?.slice(CART_COUNT_COOKIE.length + 1),
+  );
 
 function subscribeToScroll(onChange: () => void) {
   window.addEventListener("scroll", onChange, { passive: true });
@@ -32,6 +52,7 @@ const secondaryLinks = [
  */
 export function SiteHeader() {
   const scrolled = useSyncExternalStore(subscribeToScroll, isScrolled, () => false);
+  const cartCount = useSyncExternalStore(subscribeToCart, readCartCount, () => 0);
   const menuRef = useRef<HTMLDialogElement>(null);
 
   const openMenu = () => menuRef.current?.showModal();
@@ -76,8 +97,24 @@ export function SiteHeader() {
             <Link href="/wishlist" aria-label="Wishlist" className="btn-icon hidden md:inline-flex">
               <HeartIcon />
             </Link>
-            <Link href="/bag" aria-label="Shopping bag" className="btn-icon">
+            <Link
+              href="/bag"
+              aria-label={
+                cartCount > 0
+                  ? `Shopping bag, ${cartCount} ${cartCount === 1 ? "item" : "items"}`
+                  : "Shopping bag"
+              }
+              className="btn-icon relative"
+            >
               <BagIcon />
+              {cartCount > 0 && (
+                <span
+                  aria-hidden="true"
+                  className="absolute top-1.5 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-ink px-1 text-[0.625rem] leading-none text-paper tabular-nums header-overlay:bg-white header-overlay:text-ink"
+                >
+                  {cartCount > 99 ? "99+" : cartCount}
+                </span>
+              )}
             </Link>
           </nav>
         </div>
