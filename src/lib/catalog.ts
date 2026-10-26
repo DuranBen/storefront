@@ -57,7 +57,7 @@ export type StockState =
   | { status: "out_of_stock" };
 
 /** At or below this many units we tell shoppers stock is running low. */
-const LOW_STOCK_THRESHOLD = 3;
+export const LOW_STOCK_THRESHOLD = 3;
 
 export function stockUnits(product: Product) {
   return product.sizes
