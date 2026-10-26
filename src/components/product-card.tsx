@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { formatPrice, stockState, stockUnits, unsplash, type Product } from "@/lib/catalog";
+import { StockStatus } from "./product/stock-status";
 import { WishlistButton } from "./wishlist-button";
 
 export function ProductCard({
@@ -10,7 +11,8 @@ export function ProductCard({
   product: Product;
   sizes?: string;
 }) {
-  const soldOut = stockState(stockUnits(product)).status === "out_of_stock";
+  const stock = stockState(stockUnits(product));
+  const soldOut = stock.status === "out_of_stock";
   const badge = soldOut ? "Sold out" : product.badge;
 
   return (
@@ -41,6 +43,12 @@ export function ProductCard({
             </Link>
           </h3>
           <p className="text-body-sm text-muted">{formatPrice(product.price)}</p>
+          {/* Sold out is the image badge; only low stock needs a line here. */}
+          {stock.status === "low_stock" && (
+            <div className="mt-1">
+              <StockStatus state={stock} />
+            </div>
+          )}
         </div>
         <div className="relative z-10 -mt-3 -mr-2">
           <WishlistButton productName={product.name} />

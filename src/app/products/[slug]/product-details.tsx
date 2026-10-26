@@ -11,7 +11,11 @@ import { getRelatedProducts } from "@/lib/products";
 /** Breadcrumb, gallery, purchase panel and related products for one product. */
 export function ProductDetails({ product }: { product: Product }) {
   const categoryHref = `/collections/${product.categorySlug}`;
-  const available = stockState(stockUnits(product)).status !== "out_of_stock";
+  const availability = {
+    in_stock: "InStock",
+    low_stock: "LimitedAvailability",
+    out_of_stock: "OutOfStock",
+  }[stockState(stockUnits(product)).status];
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -25,7 +29,7 @@ export function ProductDetails({ product }: { product: Product }) {
       "@type": "Offer",
       price: product.price,
       priceCurrency: "USD",
-      availability: `https://schema.org/${available ? "InStock" : "OutOfStock"}`,
+      availability: `https://schema.org/${availability}`,
     },
   };
 

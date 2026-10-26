@@ -6,14 +6,24 @@ const dotColour = {
   out_of_stock: "bg-subtle",
 } as const;
 
-export function StockStatus({ state, size }: { state: StockState; size?: string }) {
+export function StockStatus({
+  state,
+  size,
+  label: customLabel,
+}: {
+  state: StockState;
+  size?: string;
+  /** Replaces the default wording; the dot still follows `state`. */
+  label?: string;
+}) {
   const suffix = size ? ` in size ${size}` : "";
   const label =
-    state.status === "in_stock"
+    customLabel ??
+    (state.status === "in_stock"
       ? `In stock${suffix}`
       : state.status === "low_stock"
         ? `Only ${state.units} left${suffix}`
-        : `Sold out${suffix}`;
+        : `Sold out${suffix}`);
 
   return (
     <p className="flex items-center gap-2 text-body-sm">

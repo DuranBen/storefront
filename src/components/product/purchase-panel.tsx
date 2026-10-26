@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { addToCart, type AddToCartResult } from "@/lib/cart-actions";
 import { notifyCartChange } from "@/lib/cart-cookie";
-import { stockState, type Product } from "@/lib/catalog";
+import { LOW_STOCK_THRESHOLD, stockState, type Product } from "@/lib/catalog";
 import { HeartIcon } from "../icons";
 import { StockStatus } from "./stock-status";
 
@@ -36,6 +36,12 @@ export function PurchasePanel({
   const totalUnits = sizes ? sizes.reduce((sum, s) => sum + s.stock, 0) : stock;
   const soldOut = totalUnits <= 0;
   const state = stockState(selected ? selected.stock : totalUnits);
+  // Before a size is chosen, flag sizes running low (marked with a dot) even
+  // when the product as a whole has plenty.
+  const someSizesLow =
+    !selected &&
+    state.status === "in_stock" &&
+    !!sizes?.some((s) => s.stock > 0 && s.stock <= LOW_STOCK_THRESHOLD);
   const added = result?.status === "added" || result?.status === "limited";
   const sizeLabel = selected ? `, size ${selected.label},` : "";
 
@@ -66,6 +72,7 @@ export function PurchasePanel({
           <div className="mt-3 grid grid-cols-5 gap-0.5 sm:grid-cols-6">
             {sizes.map((s) => {
               const unavailable = s.stock <= 0;
+              const low = !unavailable && s.stock <= LOW_STOCK_THRESHOLD;
               return (
                 <label key={s.label} className="relative">
                   <input
@@ -84,7 +91,15 @@ export function PurchasePanel({
                   <span className="flex h-11 cursor-pointer items-center justify-center border border-line text-body-sm transition-colors peer-checked:border-ink peer-checked:bg-ink peer-checked:text-paper peer-focus-visible:outline peer-focus-visible:outline-1 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ink peer-disabled:cursor-not-allowed peer-disabled:text-subtle peer-disabled:line-through hover:border-ink peer-disabled:hover:border-line">
                     {s.label}
                   </span>
+                  {low && (
+                    // Same red dot as "Only N left": this size is running low.
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute top-1.5 right-1.5 size-1.5 rounded-full bg-sale peer-checked:bg-paper"
+                    />
+                  )}
                   {unavailable && <span className="sr-only">(sold out)</span>}
+                  {low && <span className="sr-only">(only {s.stock} left)</span>}
                 </label>
               );
             })}
@@ -97,7 +112,11 @@ export function PurchasePanel({
         </fieldset>
       )}
 
-      <StockStatus state={state} size={selected?.label} />
+      {someSizesLow ? (
+        <StockStatus state={{ status: "low_stock", units: 0 }} label="Few left in some sizes" />
+      ) : (
+        <StockStatus state={state} size={selected?.label} />
+      )}
 
       <div className="space-y-2">
         {soldOut ? (
