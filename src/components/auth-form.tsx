@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 import { authClient } from "@/lib/auth-client";
 import { safeNext } from "@/lib/safe-next";
+import { Spinner } from "./spinner";
 
 type Mode = "sign-in" | "sign-up";
 type Field = "name" | "email" | "password";
@@ -280,23 +281,6 @@ function SubmitButton({ mode }: { mode: Mode }) {
       {pending && <Spinner />}
       <span>{pending ? busy : idle}</span>
     </button>
-  );
-}
-
-function Spinner() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      width={16}
-      height={16}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.5}
-      className="animate-spin motion-reduce:hidden"
-    >
-      <path d="M21 12a9 9 0 1 1-6.2-8.56" strokeLinecap="square" />
-    </svg>
   );
 }
 

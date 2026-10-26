@@ -15,6 +15,7 @@ import { CART_COOKIE, MAX_PER_LINE, parseCart, type CartEntry } from "./cart-coo
 /** A stock row with the product data the cart needs. */
 export type StockRow = {
   stockId: number;
+  productId: number;
   size: string | null;
   available: number;
   slug: string;
@@ -26,6 +27,7 @@ export type StockRow = {
 
 const stockRowColumns = {
   stockId: stock.id,
+  productId: stock.productId,
   size: stock.size,
   available: stock.quantity,
   slug: products.slug,

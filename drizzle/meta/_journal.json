@@ -15,6 +15,13 @@
       "when": 1792955925211,
       "tag": "0001_deep_alice",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792959255141,
+      "tag": "0002_wide_flatman",
+      "breakpoints": true
     }
   ]
 }

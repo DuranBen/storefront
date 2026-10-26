@@ -10,12 +10,15 @@ import {
   index,
   integer,
   jsonb,
+  pgEnum,
   pgTable,
   text,
   timestamp,
   unique,
+  uuid,
 } from "drizzle-orm/pg-core";
 import type { Img } from "@/lib/catalog";
+import { user } from "./auth-schema";
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 const updatedAt = () =>
@@ -58,7 +61,9 @@ export const products = pgTable(
 );
 
 /**
- * Units on hand per product and size. `size` is null for one-size items.
+ * Units available to sell per product and size: checkout reservations are
+ * already subtracted, and return if the order isn't paid. `size` is null for
+ * one-size items.
  * Sizes are not variants: they have no price or SKU of their own.
  */
 export const stock = pgTable(
@@ -91,5 +96,117 @@ export const productsRelations = relations(products, ({ one, many }) => ({
 export const stockRelations = relations(stock, ({ one }) => ({
   product: one(products, { fields: [stock.productId], references: [products.id] }),
 }));
+
+/** The order's lifecycle. `pending`: stock is reserved while payment is awaited. */
+export const orderStatus = pgEnum("order_status", ["pending", "confirmed", "canceled", "expired"]);
+
+/**
+ * What Stripe reports about the payment, kept apart from the order's
+ * lifecycle: an order can be pending while a delayed payment is processing,
+ * or canceled after a payment failed.
+ */
+export const paymentStatus = pgEnum("payment_status", ["unpaid", "processing", "paid", "failed"]);
+
+/** A customer's order. Totals are computed server-side from database prices. */
+export const orders = pgTable(
+  "orders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    // Snapshot at order time; the account's email may change later.
+    email: text("email").notNull(),
+    status: orderStatus("status").notNull().default("pending"),
+    paymentStatus: paymentStatus("payment_status").notNull().default("unpaid"),
+    currency: text("currency").notNull().default("usd"),
+    subtotalCents: integer("subtotal_cents").notNull(),
+    totalCents: integer("total_cents").notNull(),
+    stripeCheckoutSessionId: text("stripe_checkout_session_id").unique(),
+    stripePaymentIntentId: text("stripe_payment_intent_id").unique(),
+    shipping: jsonb("shipping"),
+    // When the stock reservation lapses if payment hasn't completed.
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    // Set when reserved stock is returned, so it's only ever returned once.
+    stockReleasedAt: timestamp("stock_released_at", { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("orders_user_id_idx").on(t.userId),
+    index("orders_status_expires_at_idx").on(t.status, t.expiresAt),
+    check("orders_currency_check", sql`${t.currency} ~ '^[a-z]{3}$'`),
+    check("orders_subtotal_cents_check", sql`${t.subtotalCents} >= 0`),
+    check("orders_total_cents_check", sql`${t.totalCents} >= 0`),
+    check("orders_confirmed_paid_check", sql`${t.status} <> 'confirmed' OR ${t.paymentStatus} = 'paid'`),
+    check("orders_paid_at_check", sql`(${t.paymentStatus} = 'paid') = (${t.paidAt} IS NOT NULL)`),
+  ],
+);
+
+/**
+ * One line per reserved stock row. Name, size, image and price are
+ * snapshots, so later catalogue changes never rewrite an order.
+ */
+export const orderItems = pgTable(
+  "order_items",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    stockId: integer("stock_id")
+      .notNull()
+      .references(() => stock.id, { onDelete: "restrict" }),
+    productId: integer("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "restrict" }),
+    productName: text("product_name").notNull(),
+    size: text("size"),
+    image: jsonb("image").$type<Img>().notNull(),
+    unitPriceCents: integer("unit_price_cents").notNull(),
+    quantity: integer("quantity").notNull(),
+    lineTotalCents: integer("line_total_cents").notNull(),
+  },
+  (t) => [
+    // Its index leads with order_id, so it also serves "items for an order".
+    unique("order_items_order_id_stock_id_unique").on(t.orderId, t.stockId),
+    check("order_items_unit_price_cents_check", sql`${t.unitPriceCents} >= 0`),
+    check("order_items_quantity_check", sql`${t.quantity} > 0`),
+    check(
+      "order_items_line_total_check",
+      sql`${t.lineTotalCents} = ${t.unitPriceCents} * ${t.quantity}`,
+    ),
+  ],
+);
+
+/** Stripe webhook events already seen, so a redelivered event is processed once. */
+export const stripeEvents = pgTable("stripe_events", {
+  id: text("id").primaryKey(),
+  type: text("type").notNull(),
+  receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+  processedAt: timestamp("processed_at", { withTimezone: true }),
+});
+
+export const ordersRelations = relations(orders, ({ one, many }) => ({
+  user: one(user, { fields: [orders.userId], references: [user.id] }),
+  items: many(orderItems),
+}));
+
+export const orderItemsRelations = relations(orderItems, ({ one }) => ({
+  order: one(orders, { fields: [orderItems.orderId], references: [orders.id] }),
+  stock: one(stock, { fields: [orderItems.stockId], references: [stock.id] }),
+  product: one(products, { fields: [orderItems.productId], references: [products.id] }),
+}));
+
+// Kept here rather than in the generated auth-schema.ts, which is regenerated.
+export const userOrdersRelations = relations(user, ({ many }) => ({
+  orders: many(orders),
+}));
+
+export type Order = typeof orders.$inferSelect;
+export type NewOrder = typeof orders.$inferInsert;
+export type OrderItem = typeof orderItems.$inferSelect;
+export type NewOrderItem = typeof orderItems.$inferInsert;
 
 export * from "./auth-schema";

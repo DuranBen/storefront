@@ -1,52 +1,12 @@
 "use server";
 
 import { refresh } from "next/cache";
-import { cookies, headers } from "next/headers";
-import { buildCart, loadProductStock, loadStockRows, maxFor } from "./cart";
-import {
-  CART_COOKIE,
-  CART_COUNT_COOKIE,
-  MAX_LINES,
-  MAX_PER_LINE,
-  parseCart,
-  serializeCart,
-  type CartEntry,
-} from "./cart-cookie";
+import { loadProductStock, loadStockRows, maxFor } from "./cart";
+import { MAX_LINES, MAX_PER_LINE, type CartEntry } from "./cart-cookie";
+import { readEntries, writeEntries } from "./cart-store";
 
 // Every input here comes from the client and is validated. There is no
 // price, name or total parameter: those are always read from the database.
-
-async function readEntries() {
-  return parseCart((await cookies()).get(CART_COOKIE)?.value);
-}
-
-/**
- * Save the cart. Entries whose stock row no longer exists are dropped, and
- * the header count comes from buildCart, so it always matches the bag page
- * (sold-out lines aren't counted).
- */
-async function writeEntries(written: CartEntry[]) {
-  const rows = await loadStockRows(written.map((entry) => entry.stockId));
-  const entries = written.filter((entry) => rows.has(entry.stockId));
-  const { itemCount } = buildCart(entries, rows);
-
-  const store = await cookies();
-  if (entries.length === 0) {
-    store.delete(CART_COOKIE);
-    store.delete(CART_COUNT_COOKIE);
-    return;
-  }
-  const options = {
-    sameSite: "lax" as const,
-    // Secure whenever the request came over HTTPS (so local http still works).
-    secure: (await headers()).get("x-forwarded-proto") === "https",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30,
-  };
-  store.set(CART_COOKIE, serializeCart(entries), { ...options, httpOnly: true });
-  // Count only, for the header badge, which reads it on the client.
-  store.set(CART_COUNT_COOKIE, String(itemCount), { ...options, httpOnly: false });
-}
 
 const toId = (value: unknown) => {
   const n = typeof value === "string" ? Number(value) : value;
