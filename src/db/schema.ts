@@ -12,9 +12,11 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import type { Img } from "@/lib/catalog";
@@ -130,17 +132,33 @@ export const orders = pgTable(
     paidAt: timestamp("paid_at", { withTimezone: true }),
     // Set when reserved stock is returned, so it's only ever returned once.
     stockReleasedAt: timestamp("stock_released_at", { withTimezone: true }),
+    // From Stripe's refund and dispute events (the Dashboard is where they're made).
+    amountRefundedCents: integer("amount_refunded_cents").notNull().default(0),
+    disputeStatus: text("dispute_status"),
+    // `created` of the dispute event last applied, so an older one can't overwrite it.
+    disputeUpdatedAt: timestamp("dispute_updated_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [
     index("orders_user_id_idx").on(t.userId),
     index("orders_status_expires_at_idx").on(t.status, t.expiresAt),
+    // One open checkout per customer, so concurrent checkouts (two tabs)
+    // can't each reserve stock and each be paid.
+    uniqueIndex("orders_one_open_checkout_per_user_idx")
+      .on(t.userId)
+      .where(sql`${t.status} = 'pending' AND ${t.paymentStatus} = 'unpaid'`),
     check("orders_currency_check", sql`${t.currency} ~ '^[a-z]{3}$'`),
     check("orders_subtotal_cents_check", sql`${t.subtotalCents} >= 0`),
     check("orders_total_cents_check", sql`${t.totalCents} >= 0`),
     check("orders_confirmed_paid_check", sql`${t.status} <> 'confirmed' OR ${t.paymentStatus} = 'paid'`),
     check("orders_paid_at_check", sql`(${t.paymentStatus} = 'paid') = (${t.paidAt} IS NOT NULL)`),
+    check(
+      "orders_amount_refunded_cents_check",
+      sql`${t.amountRefundedCents} BETWEEN 0 AND ${t.totalCents}`,
+    ),
+    // Admin order list: newest first.
+    index("orders_created_at_idx").on(t.createdAt, t.id),
   ],
 );
 
@@ -180,6 +198,27 @@ export const orderItems = pgTable(
   ],
 );
 
+/** Products a signed-in customer has saved. */
+export const wishlistItems = pgTable(
+  "wishlist_items",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    productId: integer("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.productId] })],
+);
+
+/** Newsletter sign-ups, by lowercased email. */
+export const newsletterSubscribers = pgTable("newsletter_subscribers", {
+  email: text("email").primaryKey(),
+  createdAt: createdAt(),
+});
+
 /** Stripe webhook events already seen, so a redelivered event is processed once. */
 export const stripeEvents = pgTable("stripe_events", {
   id: text("id").primaryKey(),
@@ -187,6 +226,10 @@ export const stripeEvents = pgTable("stripe_events", {
   receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
   processedAt: timestamp("processed_at", { withTimezone: true }),
 });
+
+export const wishlistItemsRelations = relations(wishlistItems, ({ one }) => ({
+  product: one(products, { fields: [wishlistItems.productId], references: [products.id] }),
+}));
 
 export const ordersRelations = relations(orders, ({ one, many }) => ({
   user: one(user, { fields: [orders.userId], references: [user.id] }),

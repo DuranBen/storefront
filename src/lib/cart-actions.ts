@@ -1,20 +1,25 @@
 "use server";
 
 import { refresh } from "next/cache";
-import { loadProductStock, loadStockRows, maxFor } from "./cart";
+import { loadProductStock, loadStockRows, maxFor, readEntries } from "./cart";
 import { MAX_LINES, MAX_PER_LINE, type CartEntry } from "./cart-cookie";
-import { readEntries, writeEntries } from "./cart-store";
+import { writeEntries } from "./cart-store";
 
 // Every input here comes from the client and is validated. There is no
 // price, name or total parameter: those are always read from the database.
 
+// Strings must be plain digits: Number() would read "" as 0 (which removes
+// the line) and accept forms like "0x5" or "1e1".
+const toNumber = (value: unknown) =>
+  typeof value === "string" ? (/^\d{1,9}$/.test(value) ? Number(value) : null) : value;
+
 const toId = (value: unknown) => {
-  const n = typeof value === "string" ? Number(value) : value;
+  const n = toNumber(value);
   return typeof n === "number" && Number.isSafeInteger(n) && n > 0 ? n : null;
 };
 
 const toQuantity = (value: unknown) => {
-  const n = typeof value === "string" ? Number(value) : value;
+  const n = toNumber(value);
   return typeof n === "number" && Number.isSafeInteger(n) && n >= 0 ? n : null;
 };
 

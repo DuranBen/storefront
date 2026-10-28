@@ -8,6 +8,7 @@ import {
   RemoveForm,
 } from "@/components/cart/cart-line-controls";
 import { CheckoutButton, ConsumeCheckoutNotice } from "@/components/cart/checkout-button";
+import { SettleBag } from "@/components/checkout/order-status-effects";
 import { StockStatus } from "@/components/product/stock-status";
 import { getCart, type CartLine } from "@/lib/cart";
 import { MAX_PER_LINE } from "@/lib/cart-cookie";
@@ -39,6 +40,12 @@ const checkoutNotices: Record<string, { title: string; message: string; tone: "i
       message: "Your previous checkout went through. You'll receive a confirmation by email.",
       tone: "info",
     },
+    "in-progress": {
+      title: "Checkout is already open",
+      message:
+        "You started checking out in another tab or window. Finish there, or check out again here to start over.",
+      tone: "info",
+    },
     error: {
       title: "Checkout didn't start",
       message:
@@ -61,6 +68,9 @@ export default function BagPage({ searchParams }: PageProps<"/bag">) {
     <main className="flex-1">
       <div className="container-page section-sm">
         <h1 className="display-sm">Shopping bag</h1>
+        {/* A checkout paid without reaching the confirmation page leaves its
+            pieces in the bag: this takes them out, then re-renders. */}
+        <SettleBag refresh />
         <Suspense fallback={<BagSkeleton />}>
           <BagContents searchParams={searchParams} />
         </Suspense>

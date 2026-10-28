@@ -106,7 +106,9 @@ export function parseProduct(
     errors.price = "Enter a whole-dollar amount, like 790.";
   } else {
     const dollars = Number(values.price.replace(/,/g, ""));
-    if (dollars > MAX_PRICE_DOLLARS) errors.price = "That price is too high.";
+    // Stripe can't charge below its minimum, so a free product couldn't be checked out.
+    if (dollars < 1) errors.price = "Enter a price of at least $1.";
+    else if (dollars > MAX_PRICE_DOLLARS) errors.price = "That price is too high.";
     else priceCents = dollars * 100;
   }
 

@@ -9,6 +9,7 @@ import { updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { categories, products, stock } from "@/db/schema";
+import { violatedConstraint } from "./db-errors";
 import {
   parseProduct,
   parseQuantity,
@@ -23,14 +24,6 @@ export type ProductFormState =
   | { status: "saved"; values: ProductValues }
   | { status: "invalid"; values: ProductValues; errors: ProductErrors }
   | { status: "error"; values: ProductValues; message: string };
-
-/** Postgres constraint name behind a (possibly wrapped) driver error. */
-function violatedConstraint(error: unknown): string | undefined {
-  for (let e: unknown = error; e && typeof e === "object"; e = (e as { cause?: unknown }).cause) {
-    const constraint = (e as { constraint?: unknown }).constraint;
-    if (typeof constraint === "string") return constraint;
-  }
-}
 
 const toId = (value: FormDataEntryValue | null) => {
   const n = typeof value === "string" && /^\d{1,9}$/.test(value) ? Number(value) : 0;

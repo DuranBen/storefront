@@ -3,8 +3,8 @@ import { revalidateTag } from "next/cache";
 import type Stripe from "stripe";
 import { db } from "@/db";
 import { stripeEvents } from "@/db/schema";
-import { markPaid, markProcessing, releaseForSession } from "@/lib/orders";
-import { stripe, webhookSecret } from "@/lib/stripe";
+import { markPaid, markProcessing, recordDispute, recordRefund, releaseForSession } from "@/lib/orders";
+import { isLiveMode, stripe, webhookSecret } from "@/lib/stripe";
 
 /** The events checkout depends on; subscribe the endpoint to exactly these. */
 const HANDLED_EVENTS = new Set<Stripe.Event["type"]>([
@@ -12,6 +12,11 @@ const HANDLED_EVENTS = new Set<Stripe.Event["type"]>([
   "checkout.session.async_payment_succeeded",
   "checkout.session.async_payment_failed",
   "checkout.session.expired",
+  // Refunds and disputes are made in the Stripe Dashboard; these record them.
+  "charge.refunded",
+  "charge.dispute.created",
+  "charge.dispute.updated",
+  "charge.dispute.closed",
 ]);
 
 /**
@@ -32,6 +37,13 @@ export async function POST(request: Request) {
     event = stripe().webhooks.constructEvent(body, signature, webhookSecret());
   } catch {
     return new Response("Invalid signature", { status: 400 });
+  }
+  // A test event reaching a live deployment (or the reverse) means the
+  // endpoint or its secret is misconfigured. Refuse it, so Stripe shows the
+  // failure, rather than acting on orders from the other mode.
+  if (event.livemode !== isLiveMode()) {
+    console.error(`[stripe] Rejected ${event.livemode ? "live" : "test"} event ${event.id}: checkout runs in ${isLiveMode() ? "live" : "test"} mode`);
+    return new Response("Wrong mode", { status: 400 });
   }
 
   // Acknowledge anything else without recording or acting on it.
@@ -80,6 +92,12 @@ async function handle(event: Stripe.Event) {
       return releaseForSession(event.data.object, "payment_failed");
     case "checkout.session.expired":
       return releaseForSession(event.data.object, "expired");
+    case "charge.refunded":
+      return recordRefund(event.data.object);
+    case "charge.dispute.created":
+    case "charge.dispute.updated":
+    case "charge.dispute.closed":
+      return recordDispute(event.data.object, event.created);
     default:
       return "ignored"; // unreachable: filtered by HANDLED_EVENTS
   }

@@ -56,26 +56,9 @@ export async function getMyOrderBySession(sessionId: string) {
   return orderWithItems(user.id, { sessionId });
 }
 
-/** By id, without redirecting: undefined when signed out or not theirs. */
+/** By id, with its lines, without redirecting: undefined when signed out or not theirs. */
 export async function findMyOrder(orderId: string) {
   const user = await getCurrentUser();
   if (!user || !UUID.test(orderId)) return undefined;
-  const [order] = await db
-    .select()
-    .from(orders)
-    .where(and(eq(orders.id, orderId), eq(orders.userId, user.id)))
-    .limit(1);
-  return order;
-}
-
-/** By Checkout Session id, without redirecting: undefined when signed out or not theirs. */
-export async function findMyOrderBySession(sessionId: string) {
-  const user = await getCurrentUser();
-  if (!user || !sessionId) return undefined;
-  const [order] = await db
-    .select()
-    .from(orders)
-    .where(and(eq(orders.stripeCheckoutSessionId, sessionId), eq(orders.userId, user.id)))
-    .limit(1);
-  return order;
+  return orderWithItems(user.id, { id: orderId });
 }

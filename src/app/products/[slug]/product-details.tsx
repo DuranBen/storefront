@@ -105,8 +105,10 @@ export function ProductDetails({ product }: { product: Product }) {
               <Disclosure title="Delivery & returns">
                 <p>
                   Complimentary express delivery in 2–4 working days. Returns are free within 30
-                  days. Book a collection from your account and we&rsquo;ll pick it up from your
-                  door.
+                  days.{" "}
+                  <Link href="/client-services/returns" className="link">
+                    How returns work
+                  </Link>
                 </p>
               </Disclosure>
             </div>

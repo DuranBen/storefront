@@ -210,3 +210,140 @@ export const menuLinks = [
   { label: "Jewellery", href: "/collections/jewellery" },
   { label: "Gifts", href: "/gifts" },
 ];
+
+/**
+ * Collection pages (/collections/[slug]). An editorial collection lists
+ * products by slug or by category; any category without an entry here gets
+ * a plain page of its products. Which pieces belong to each collection is a
+ * merchandising choice: edit the lists freely.
+ */
+export type CollectionPage = {
+  slug: string;
+  title: string;
+  eyebrow?: string;
+  description: string;
+  image?: Img;
+} & ({ productSlugs: string[] } | { categorySlugs: string[] } | { allProducts: true });
+
+const collectionImage = (slug: string) => collections.find((c) => c.slug === slug)?.image;
+
+export const collectionPages: CollectionPage[] = [
+  {
+    slug: "autumn-winter-2026",
+    eyebrow: hero.eyebrow,
+    title: hero.title,
+    description: hero.body,
+    image: hero.image,
+    allProducts: true,
+  },
+  {
+    slug: "women",
+    title: "Women",
+    description: "Knitwear and outerwear, printed satin pumps, structured handbags and fine jewellery.",
+    image: collectionImage("women"),
+    productSlugs: [
+      "ribbed-knit-poncho",
+      "printed-satin-pump",
+      "chain-shoulder-bag",
+      "croc-effect-shoulder-bag",
+      "structured-satchel",
+      "pearl-strand-necklace",
+      "sapphire-drop-earrings",
+      "rose-gold-link-bracelet",
+    ],
+  },
+  {
+    slug: "men",
+    title: "Men",
+    description: "Outerwear, hand-finished suede shoes, leather bags and eyewear.",
+    image: collectionImage("men"),
+    productSlugs: [
+      "shell-bomber-jacket",
+      "suede-brogue",
+      "leather-backpack",
+      "round-metal-sunglasses",
+    ],
+  },
+  {
+    slug: "accessories",
+    title: "Accessories",
+    description: "Bags, eyewear and jewellery to finish every look.",
+    image: collectionImage("accessories"),
+    categorySlugs: ["handbags", "bags", "eyewear", "jewellery"],
+  },
+  {
+    slug: "shoes",
+    title: "Shoes",
+    description: "Lasted by hand, in suede, leather and printed satin.",
+    image: collectionImage("shoes"),
+    categorySlugs: ["shoes"],
+  },
+  {
+    slug: "handbags",
+    eyebrow: leatherGoods.eyebrow,
+    title: "Handbags & leather goods",
+    description: leatherGoods.body,
+    image: leatherGoods.image,
+    categorySlugs: ["handbags", "bags"],
+  },
+  {
+    slug: "tailoring",
+    eyebrow: tailoringEdit.eyebrow,
+    title: tailoringEdit.title,
+    description: tailoringEdit.body,
+    image: tailoringEdit.images[0],
+    productSlugs: [
+      "shell-bomber-jacket",
+      "ribbed-knit-poncho",
+      "suede-brogue",
+      "structured-satchel",
+    ],
+  },
+  {
+    slug: "evening",
+    eyebrow: eveningBanner.eyebrow,
+    title: eveningBanner.title,
+    description: eveningBanner.body,
+    image: eveningBanner.image,
+    productSlugs: [
+      "printed-satin-pump",
+      "chain-shoulder-bag",
+      "croc-effect-shoulder-bag",
+      "sapphire-drop-earrings",
+      "pearl-strand-necklace",
+    ],
+  },
+];
+
+/**
+ * Client services contact details shown on the content pages.
+ * PLACEHOLDERS: replace with the real address and hours before launch.
+ */
+export const contact = {
+  email: "clientservices@example.com",
+  careersEmail: "careers@example.com",
+  privacyEmail: "privacy@example.com",
+  hours: "Monday to Saturday, 9am to 7pm ET",
+};
+
+/**
+ * Stores shown on /stores and offered for appointments.
+ * PLACEHOLDERS: replace with the real stores, addresses and hours before launch.
+ */
+export const stores = [
+  {
+    city: "New York",
+    area: "Upper East Side",
+    hours: ["Monday to Saturday, 10am to 7pm", "Sunday, 12pm to 6pm"],
+  },
+  {
+    city: "Los Angeles",
+    area: "Beverly Hills",
+    hours: ["Monday to Saturday, 10am to 7pm", "Sunday, 12pm to 6pm"],
+  },
+  {
+    city: "Chicago",
+    area: "Gold Coast",
+    hours: ["Monday to Saturday, 10am to 7pm", "Sunday, 12pm to 5pm"],
+  },
+];

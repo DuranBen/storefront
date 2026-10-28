@@ -51,7 +51,7 @@ export function ProductCard({
           )}
         </div>
         <div className="relative z-10 -mt-3 -mr-2">
-          <WishlistButton productName={product.name} />
+          <WishlistButton productSlug={product.slug} productName={product.name} />
         </div>
       </div>
     </article>

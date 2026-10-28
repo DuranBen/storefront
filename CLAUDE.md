@@ -4,60 +4,53 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 @AGENTS.md
 
-The App Router guides are in `node_modules/next/dist/docs/01-app/`.
+The App Router guides are in `node_modules/next/dist/docs/01-app/`. `cacheComponents` and `partialPrefetching` are on (`next.config.ts`): check the docs before adding request data or caching. Tailwind v4 is wired through a Turbopack loader rule, not PostCSS.
 
-## Commands
+## Working in this repo
 
-```bash
-npm run dev          # dev server (Turbopack) on http://localhost:3000
-npm run build        # production build (also type-checks)
-npm run lint         # ESLint 9 flat config (eslint.config.mjs)
-npx tsc --noEmit     # type-check only
+- No test framework: verify with `npx tsc --noEmit`, `npm run lint` and `npm run build`, and by running the app.
+- Run the app on the origin in `BETTER_AUTH_URL` (`http://localhost:3000` locally): Better Auth's origin check and Stripe's success/cancel redirects both use it.
+- Env: `DATABASE_URL` (Neon **pooled** string), `BETTER_AUTH_SECRET` (`openssl rand -base64 32`; weak secrets are refused at startup), `BETTER_AUTH_URL`, `STRIPE_SECRET_KEY` (restricted `rk_test_…` key), `STRIPE_WEBHOOK_SECRET`, `CRON_SECRET` (32+ characters).
+- Local webhooks: `stripe listen --events checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed,checkout.session.expired,charge.refunded,charge.dispute.created,charge.dispute.updated,charge.dispute.closed --forward-to localhost:3000/api/stripe/webhook`. The deployed endpoint needs the same events.
+- Admin role: only via `npm run admin:grant -- <email> [--revoke]`; clients can never set `role`.
 
-npm run db:generate  # generate SQL migrations from src/db/schema.ts into ./drizzle
-npm run db:migrate   # apply migrations
-npm run db:push      # push schema directly (prototyping only)
-npm run db:studio    # Drizzle Studio
-npm run admin:grant -- <email> [--revoke]  # give an existing user the admin role
-```
+## Database
 
-There is no test framework configured.
+- Every schema change goes through migrations (`db:generate` + `db:migrate`), never `db:push`.
+- `schema.ts` is the only file drizzle-kit reads, so other schema files (the generated `auth-schema.ts`) must be re-exported from it.
+- The Neon HTTP driver has no interactive transactions; `db.batch([...])` is the transaction. Keep every state change a single conditional statement (or one batch), so duplicate webhooks, retries and races are harmless.
+- Drizzle prints columns unqualified in single-table selects: inside a raw `sql` subquery, `${orders.id}` becomes `"id"` and binds to the subquery's table. Qualify by hand there.
+- `auth-schema.ts` is generated with `npx auth@<installed better-auth version> generate --config src/lib/auth.ts --output src/db/auth-schema.ts` (the old `@better-auth/cli` stops at 1.4), then hand-edited (see its header). Re-run after changing auth config or plugins.
 
-Setup: `cp .env.example .env` and fill in `DATABASE_URL` (Neon **pooled** connection string), `BETTER_AUTH_SECRET` (`openssl rand -base64 32`) and `BETTER_AUTH_URL` (also used for Stripe's redirect URLs). For checkout, add `STRIPE_SECRET_KEY` (a restricted `rk_test_…` key from a Stripe sandbox) and `STRIPE_WEBHOOK_SECRET`; locally, `stripe listen --forward-to localhost:3000/api/stripe/webhook` prints the webhook secret.
+## Auth and authorization
 
-## Architecture
+- Check the session with `getCurrentUser()` / `requireUser()` / `requireAdmin()` (`src/lib/session.ts`) in every protected page, Server Action and Route Handler, inside `<Suspense>`. `src/proxy.ts` only redirects page loads with no session cookie; it lets POSTs through.
+- Sign-in and sign-up go through `authClient`, never `auth.api.*` in a Server Action: rate limiting, `disabledPaths` and the origin check only run in Better Auth's HTTP handler. `nextCookies()` stays last in `plugins`.
+- Customer data is read only through modules that take the customer from the session (`my-orders.ts`, `wishlist.ts`); never pass a user id in.
+- Parse client input strictly: numbers from strings must be plain digits (`Number("")` is 0, which would remove a cart line). Never accept prices or totals from the client.
+- **Admin**: every admin page calls `requireAdmin()` itself (layouts don't re-render on client navigation), and every admin Server Action starts with `await requireAdmin()` before reading input. A page renders apart from its layout, so **all admin UI, back links included, must render after that check** (inside `AdminSection`, its `back` prop, or after a `getAdmin…()` read); anything outside reaches non-admins. Non-admins get a 404. Every export of `src/lib/admin.ts` authorizes itself.
 
-Stack: Next.js 16 App Router, React 19, TypeScript (strict), Tailwind CSS v4, Better Auth, Drizzle ORM on Neon Postgres. Import alias `@/*` → `src/*`.
+## Orders, checkout and payments
 
-**Next config (`next.config.ts`)**: `cacheComponents` and `partialPrefetching` are enabled, which changes how data fetching and caching work in Server Components versus older Next.js. Check the docs before adding dynamic data access or caching. Tailwind is wired in through a Turbopack CSS loader rule (`@tailwindcss/turbopack`), not PostCSS.
+- Order lifecycle (`status`) is kept apart from what Stripe reports (`payment_status`). Order lines snapshot name, size, image and price.
+- **Only the webhook marks an order paid**, after verifying the signature and checking the amount and currency. The success page only reads.
+- Session line items use `price_data` from database prices.
+- **One open checkout per customer** (partial unique index on pending + unpaid). Sessions are attached only to orders still open, and releases are conditional on the session the caller saw, so a released order never has a payable session.
+- `stock.quantity` is units available to sell: reserving subtracts and `releaseOrder` returns them exactly once. "Reserved" is derived from open orders, never stored. Admin stock writes are compare-and-set (`setStock`).
+- Open orders are closed with `closeOpenOrder`: expire the Stripe session first, then release; a `complete` session keeps its stock. The overdue sweep does the same, so a paid order whose webhook is late is never resold. It runs in `after()` from `startCheckout` and from `GET /api/cron/sweep` (Bearer `CRON_SECRET`; schedule it every few minutes).
+- Stripe's Back link lands on `/checkout/cancel`, which changes nothing on GET; cancelling is the page's POST action.
+- The bag is a cookie the webhook can't touch: `cart_checkout` remembers the order, and `settleBag` (confirmation page and bag) removes that order's pieces once paid.
+- Money without a confirmed order (paid after release, amount mismatch) is stored as `paid` but not `confirmed`, never released, and shown to admins as "needs attention". Refunds and disputes are made in the Stripe Dashboard and recorded by the webhook; the admin Orders pages are read-only.
+- Prices are whole dollars, at least $1 (the storefront shows no cents; Stripe has a minimum charge).
 
-**Database (`src/db/`)**: `index.ts` exports a single `db` built with the Neon HTTP driver (`drizzle-orm/neon-http`) and throws at import time if `DATABASE_URL` is unset. The HTTP driver is stateless per query, so it does not support interactive transactions. `schema.ts` is the only schema file drizzle-kit reads (`drizzle.config.ts`), so any other schema file (e.g. the generated `auth-schema.ts`) must be re-exported from it. That re-export also makes the tables available to `db` and the Better Auth adapter. Use migrations (`db:generate` + `db:migrate`) for every schema change. Although interactive transactions aren't supported, `db.batch([...])` runs its statements as one transaction.
+## Caching
 
-**Orders**: `orders` belong to a signed-in `user` (`ON DELETE RESTRICT`) and keep the order lifecycle (`status`: pending / confirmed / canceled / expired) separate from what Stripe reports (`payment_status`: unpaid / processing / paid / failed); check constraints keep them consistent (`confirmed` requires `paid`, and `paid_at` is set exactly when paid). `order_items` snapshot name, size, image and unit price per stock row, so catalogue changes never rewrite an order, and RESTRICT foreign keys stop ordered stock or products being deleted. `stripe_events` records webhook event ids for idempotent processing.
+- Catalogue reads are `"use cache"` functions tagged `products` (`src/lib/products.ts`). Every catalogue or stock change expires the tag immediately: `updateTag("products")` in Server Actions; `revalidateTag("products", { expire: 0 })` in Route Handlers and inside `after()` (`updateTag` only works in the action itself). Never `"max"`: stale-while-revalidate would show old stock.
+- Release functions report whether stock actually moved; revalidate only then.
+- Per-user state on cached pages (wishlist hearts) is loaded on the client (`WishlistProvider`), not rendered into them.
 
-**Checkout** (Stripe-hosted Checkout Sessions; `src/lib/orders.ts`, `src/lib/checkout-actions.ts`):
-- `startCheckout` revalidates the cart against live stock, then `reserveOrder` creates the pending order and decrements stock in one `db.batch`; `stock_quantity_check` rolls it all back rather than oversell. Session line items use inline `price_data` from database prices; never accept prices or totals from the client.
-- **Only the webhook (`src/app/api/stripe/webhook/route.ts`) marks an order paid**, from signature-verified `checkout.session.completed` / `async_payment_succeeded` events, after checking the amount against the order. The success page only reads the order and refreshes until it's confirmed.
-- Stock is returned exactly once by `releaseOrder` (expired, canceled or failed payment), whether from the webhook, the cancel route or the overdue-reservation sweep. Keep state changes as single conditional statements so duplicate events and retries stay harmless.
+## Content
 
-**Auth** (email/password only; no email verification or password reset yet):
-- `src/lib/auth.ts`: server-side `auth` instance using the Drizzle adapter (`provider: "pg"`). The `nextCookies()` plugin must stay **last** in `plugins`. Users have a `role` (`customer` | `admin`) that clients can't set (`input: false`).
-- `src/lib/session.ts`: the data access layer. Check auth with `getCurrentUser()` / `requireUser()` / `requireAdmin()` in every protected page, Server Action and Route Handler, inside `<Suspense>` (they read headers). `src/proxy.ts` only does an optimistic cookie redirect for `/account` and `/admin`.
-- `src/lib/auth-client.ts`: React client (`authClient`). Sign-in and sign-up must go through it, not `auth.api.*` in a Server Action: rate limiting, `disabledPaths` and the origin check only run in Better Auth's HTTP handler.
-- `src/app/api/auth/[...all]/route.ts`: mounts Better Auth's handlers.
-- Customers' own orders are read only through `src/lib/my-orders.ts`, whose functions resolve the customer from the session themselves (never pass a user id in).
-
-**Admin** (`/admin/*`; grant the role with `npm run admin:grant`). Never rely on hiding links:
-- `src/app/admin/layout.tsx` renders `AdminShell` (`src/components/admin/admin-shell.tsx`) inside `<Suspense>`; it calls `requireAdmin()` before rendering the title or navigation, so non-admins receive none of the admin UI, not even in the prerendered shell (its fallback is a neutral skeleton).
-- **Every admin page also calls `requireAdmin()` itself** (via `AdminSection`): layouts don't re-render on client-side navigation between sibling pages.
-- **Every admin Server Action must start with `await requireAdmin()`** before reading its input; admin data reads must call it too. The proxy lets POSTs through, so actions are their own only check.
-- Admin reads live in `src/lib/admin.ts`, actions in `src/lib/admin-actions.ts`, product validation in `src/lib/product-input.ts` (server-side; whole-dollar prices, since the storefront shows no cents). Writes that change catalogue data call `updateTag("products")` so the cached storefront updates immediately. Stock is set with a compare-and-set on the quantity the admin saw, because checkout reserves stock concurrently.
-- Inventory: `stock.quantity` is units **available to sell**; starting checkout subtracts reserved units and they return on expiry/cancel/failure. "Reserved" shown to admins is derived from pending, unreleased orders (`reservedByStock` in `admin.ts`), never stored. Admin stock writes go through `setStock` only. Every stock change expires the `products` cache immediately: `updateTag("products")` in Server Actions (admin actions, `startCheckout` after the sweep, closing earlier checkouts, reserving and releasing), `revalidateTag("products", { expire: 0 })` in Route Handlers (webhook releases, cancel route). Not `"max"`: stale-while-revalidate would show old stock to the next shopper. Release functions report whether stock actually moved (`releaseOrder` → boolean, `releaseOverdueReservations` → count, `cancelOpenOrder` → "canceled" vs "unchanged"); revalidate only then.
-
-The auth tables live in `src/db/auth-schema.ts`, generated with the CLI matching the installed version (the old `@better-auth/cli` package stops at 1.4), then hand-edited (see its header):
-
-```bash
-npx auth@<better-auth version> generate --config src/lib/auth.ts --output src/db/auth-schema.ts
-```
-
-Re-run it after changing auth config or plugins, then `db:generate` + `db:migrate`.
+- The content pages (`/about`, `/client-services`, `/legal`, `/stores`, `/appointments`, `/careers`) are **draft copy to review before launch** (privacy and terms need legal review). Contact details and stores are placeholders in `contact` and `stores` in `src/lib/catalog.ts`.
+- The cookie policy must list every cookie the site sets; update it when adding one.
+- Editorial collection membership lives in `collectionPages` in `src/lib/catalog.ts`.

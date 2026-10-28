@@ -2,10 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import {
-  ClearCartOnConfirm,
-  RefreshUntilConfirmed,
-} from "@/components/checkout/order-status-effects";
+import { RefreshUntilConfirmed, SettleBag } from "@/components/checkout/order-status-effects";
 import { Spinner } from "@/components/spinner";
 import { OrderSummary } from "@/components/orders/order-summary";
 import { orderReference } from "@/lib/order-status";
@@ -88,7 +85,7 @@ async function Confirmation({
 
   return (
     <div>
-      {(confirmed || processing) && <ClearCartOnConfirm sessionId={sessionId} />}
+      {(confirmed || processing) && <SettleBag />}
 
       <div className="text-center" role="status">
         <p className="eyebrow inline-flex items-center gap-2 text-muted">

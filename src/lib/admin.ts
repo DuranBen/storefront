@@ -3,10 +3,25 @@
 // should always see current data.
 
 import "server-only";
-import { and, asc, between, count, desc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  between,
+  count,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  lt,
+  ne,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import { db } from "@/db";
 import { categories, orderItems, orders, products, stock } from "@/db/schema";
 import { LOW_STOCK_THRESHOLD } from "./catalog";
+import { OPEN_DISPUTE_STATUSES } from "./order-status";
 import { requireAdmin } from "./session";
 
 export async function listAdminProducts() {
@@ -170,4 +185,89 @@ export async function listStock({
     hasPrevious: preceding > 0,
     hasNext: preceding + rows.length < total,
   };
+}
+
+export const ORDER_VIEWS = ["all", "attention", "open", "paid"] as const;
+export type OrderView = (typeof ORDER_VIEWS)[number];
+export const ORDER_PAGE_SIZE = 50;
+
+/**
+ * "attention": money taken without a confirmed order (paid after release, or
+ * an amount that didn't match) and not yet refunded, or an open dispute.
+ */
+const orderViewCondition = (view: OrderView): SQL | undefined =>
+  view === "attention"
+    ? or(
+        and(
+          eq(orders.paymentStatus, "paid"),
+          ne(orders.status, "confirmed"),
+          lt(orders.amountRefundedCents, orders.totalCents),
+        ),
+        inArray(orders.disputeStatus, OPEN_DISPUTE_STATUSES),
+      )
+    : view === "open"
+      ? eq(orders.status, "pending")
+      : view === "paid"
+        ? eq(orders.status, "confirmed")
+        : undefined;
+
+/**
+ * Orders newest first, ORDER_PAGE_SIZE at a time. `after` is the last order
+ * id of the previous page (validated by the caller); pages continue from it
+ * rather than an offset, so new orders don't shift the pages.
+ */
+export async function listAdminOrders({ view, after }: { view: OrderView; after: string | null }) {
+  await requireAdmin("/admin/orders");
+
+  const [counts] = await db
+    .select({
+      all: count(),
+      attention: sql<number>`count(*) filter (where ${orderViewCondition("attention")})::int`,
+      open: sql<number>`count(*) filter (where ${orderViewCondition("open")})::int`,
+      paid: sql<number>`count(*) filter (where ${orderViewCondition("paid")})::int`,
+    })
+    .from(orders);
+
+  const cursor = after
+    ? sql`(${orders.createdAt}, ${orders.id}) < (select o2.created_at, o2.id from orders o2 where o2.id = ${after})`
+    : undefined;
+  const rows = await db
+    .select({
+      id: orders.id,
+      email: orders.email,
+      status: orders.status,
+      paymentStatus: orders.paymentStatus,
+      totalCents: orders.totalCents,
+      amountRefundedCents: orders.amountRefundedCents,
+      disputeStatus: orders.disputeStatus,
+      createdAt: orders.createdAt,
+      // Qualified by hand: Drizzle prints ${orders.id} as a bare "id" in a
+      // single-table select, which inside this subquery would mean i.id.
+      itemCount: sql<number>`(select coalesce(sum(i.quantity), 0)::int from order_items i where i.order_id = orders.id)`,
+    })
+    .from(orders)
+    .where(and(orderViewCondition(view), cursor))
+    .orderBy(desc(orders.createdAt), desc(orders.id))
+    .limit(ORDER_PAGE_SIZE + 1);
+
+  return {
+    rows: rows.slice(0, ORDER_PAGE_SIZE),
+    counts,
+    hasNext: rows.length > ORDER_PAGE_SIZE,
+  };
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** One order with its lines and customer; undefined for an unknown or malformed id. */
+export async function getAdminOrder(id: string) {
+  await requireAdmin(`/admin/orders/${encodeURIComponent(id)}`);
+  if (!UUID.test(id)) return undefined;
+  return db.query.orders.findFirst({
+    where: eq(orders.id, id),
+    with: {
+      items: { orderBy: asc(orderItems.id) },
+      user: { columns: { id: true, name: true, email: true } },
+    },
+  });
 }

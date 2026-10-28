@@ -22,6 +22,20 @@
       "when": 1792959255141,
       "tag": "0002_wide_flatman",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793146085751,
+      "tag": "0003_early_ironclad",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793147643730,
+      "tag": "0004_common_bruce_banner",
+      "breakpoints": true
     }
   ]
 }

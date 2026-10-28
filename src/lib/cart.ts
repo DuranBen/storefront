@@ -5,6 +5,7 @@
 // Reading cookies() is request data: with Cache Components, render anything
 // that calls getCart() inside <Suspense>.
 
+import "server-only";
 import { asc, eq, inArray } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { db } from "@/db";
@@ -107,9 +108,14 @@ export function buildCart(entries: CartEntry[], rows: Map<number, StockRow>): Ca
   };
 }
 
+/** The cart cookie's entries (stock ids and quantities), parsed strictly. */
+export async function readEntries() {
+  return parseCart((await cookies()).get(CART_COOKIE)?.value);
+}
+
 /** The shopper's cart, priced and checked against current data. */
 export async function getCart(): Promise<Cart> {
-  const entries = parseCart((await cookies()).get(CART_COOKIE)?.value);
+  const entries = await readEntries();
   const rows = await loadStockRows(entries.map((entry) => entry.stockId));
   return buildCart(entries, rows);
 }

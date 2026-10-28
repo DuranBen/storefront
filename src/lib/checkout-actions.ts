@@ -1,19 +1,20 @@
 "use server";
 
-import { updateTag } from "next/cache";
+import { revalidateTag, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { getCart } from "./cart";
-import { clearCart, saveReconciled } from "./cart-store";
+import { rememberCheckout, saveReconciled, settleCheckout } from "./cart-store";
 import { unsplash } from "./catalog";
 import {
   attachCheckoutSession,
-  cancelOpenOrder,
+  closeOpenOrder,
   getOpenOrders,
   releaseOrder,
   releaseOverdueReservations,
   reserveOrder,
 } from "./orders";
-import { findMyOrderBySession } from "./my-orders";
+import { findMyOrder } from "./my-orders";
 import { getCurrentUser } from "./session";
 import { siteUrl, stripe } from "./stripe";
 
@@ -41,18 +42,25 @@ export async function startCheckout() {
     redirect("/bag?checkout=changed");
   }
 
+  // Return reservations the expiry webhook missed. After the response, so the
+  // shopper doesn't wait on its Stripe calls (the cart was checked above, so
+  // it can't use them anyway). updateTag only works in the action itself.
+  after(async () => {
+    if (await releaseOverdueReservations()) revalidateTag("products", { expire: 0 });
+  });
+
   // Every stock change below expires the cached catalogue straight away
   // (updateTag), so product pages never show stock that has moved.
-  if (await releaseOverdueReservations()) updateTag("products");
   // A previous checkout left open (e.g. Back from Stripe) would hold its
   // stock and could still be paid: close it before starting a new one.
   for (const open of await getOpenOrders(user.id)) {
     let outcome;
     try {
-      outcome = await cancelOpenOrder(open);
-      if (outcome === "canceled") updateTag("products");
+      outcome = await closeOpenOrder(open);
+      if (outcome === "released") updateTag("products");
     } catch (error) {
-      // Stripe unreachable: leave it to expire (its stock is released then).
+      // Stripe unreachable or the session still open: leave it to expire (its
+      // stock is released then). The new reservation is then refused.
       console.error(`[checkout] Couldn't close earlier order ${open.id}`, error);
       continue;
     }
@@ -61,12 +69,14 @@ export async function startCheckout() {
 
   const reserved = await reserveOrder(user, cart);
   if (!reserved.ok) {
-    redirect(reserved.reason === "changed" ? "/bag?checkout=changed" : "/bag?checkout=sold-out");
+    const notice = { changed: "changed", sold_out: "sold-out", in_progress: "in-progress" };
+    redirect(`/bag?checkout=${notice[reserved.reason]}`);
   }
   updateTag("products");
   const { order } = reserved;
 
   let sessionUrl: string | null;
+  let superseded = false;
   try {
     const session = await stripe().checkout.sessions.create(
       {
@@ -95,28 +105,68 @@ export async function startCheckout() {
       // A retried request returns the same session instead of a second one.
       { idempotencyKey: `checkout:${order.id}` },
     );
-    await attachCheckoutSession(order.id, session.id);
-    sessionUrl = session.url;
+    if (await attachCheckoutSession(order.id, session.id)) {
+      sessionUrl = session.url;
+    } else {
+      // A checkout started meanwhile (another tab) closed this order and
+      // returned its stock: never hand out a session for it.
+      superseded = true;
+      sessionUrl = null;
+      await stripe()
+        .checkout.sessions.expire(session.id)
+        .catch((error) =>
+          console.error(`[checkout] Couldn't expire session for closed order ${order.id}`, error),
+        );
+    }
   } catch (error) {
     console.error(`[checkout] Couldn't create a Stripe session for order ${order.id}`, error);
     sessionUrl = null;
   }
 
+  if (superseded) redirect("/bag?checkout=in-progress");
   if (!sessionUrl) {
     if (await releaseOrder(order.id, "canceled")) updateTag("products");
     redirect("/bag?checkout=error");
   }
+  await rememberCheckout(order.id);
   redirect(sessionUrl);
 }
 
 /**
- * Empty the bag once its order is paid or its payment is processing. Called
- * from the success page; checks the order belongs to the signed-in customer.
+ * Take the paid checkout's pieces out of the bag. Called from the
+ * confirmation page and the bag; takes no input (the order comes from this
+ * browser's checkout cookie and must belong to the signed-in customer).
+ * Returns the bag's new item count when it changed.
  */
-export async function clearCartForOrder(sessionId: string) {
-  if (typeof sessionId !== "string") return;
-  const order = await findMyOrderBySession(sessionId);
-  if (order && (order.status === "confirmed" || order.paymentStatus === "processing")) {
-    await clearCart();
+export async function settleBag() {
+  return settleCheckout();
+}
+
+/**
+ * Leave a checkout from Stripe's Back link: expire its session, so it can't be
+ * paid later, return the reserved stock and go back to the bag. A POST from
+ * the cancel page (a Server Action, so the origin is checked), never the GET
+ * Stripe redirects with: a link alone can't cancel anyone's checkout.
+ */
+export async function cancelCheckout(formData: FormData) {
+  const orderId = formData.get("orderId");
+  // Only the owner's own open order; anything else just goes back to the bag.
+  const order = typeof orderId === "string" ? await findMyOrder(orderId) : undefined;
+  if (order?.status === "pending" && order.paymentStatus === "unpaid") {
+    let outcome: Awaited<ReturnType<typeof closeOpenOrder>> | "unreachable";
+    try {
+      outcome = await closeOpenOrder(order);
+      if (outcome === "released") updateTag("products");
+    } catch (error) {
+      // Stripe unreachable: leave the order open rather than release stock
+      // for a session that might still be paid. Its expiry releases it.
+      console.error(`[checkout] Couldn't cancel order ${order.id}`, error);
+      outcome = "unreachable";
+    }
+    if (outcome === "completed" && order.stripeCheckoutSessionId) {
+      // Paid in another tab before Back was pressed: show the order instead.
+      redirect(`/checkout/success?session_id=${encodeURIComponent(order.stripeCheckoutSessionId)}`);
+    }
   }
+  redirect("/bag?checkout=canceled");
 }

@@ -2,10 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { AdminSectionSkeleton } from "@/components/admin/admin-shell";
+import { AdminBackLink, AdminSectionSkeleton } from "@/components/admin/admin-shell";
 import { AvailabilityPanel } from "@/components/admin/availability-panel";
 import { ProductForm } from "@/components/admin/product-form";
-import { ArrowLeftIcon } from "@/components/icons";
 import { getAdminProduct, listCategoryOptions } from "@/lib/admin";
 import type { ProductValues } from "@/lib/product-input";
 
@@ -15,24 +14,15 @@ export const metadata: Metadata = {
 };
 
 // The id is request data, so it's read inside Suspense; getAdminProduct()
-// calls requireAdmin() itself.
+// calls requireAdmin() itself, and everything here renders after it.
 export default function EditProductPage({
   params,
   searchParams,
 }: PageProps<"/admin/products/[id]">) {
   return (
-    <>
-      <Link
-        href="/admin/products"
-        className="label-caps link-quiet mb-6 inline-flex items-center gap-2"
-      >
-        <ArrowLeftIcon width={16} height={16} />
-        All products
-      </Link>
-      <Suspense fallback={<AdminSectionSkeleton />}>
-        <EditProduct params={params} searchParams={searchParams} />
-      </Suspense>
-    </>
+    <Suspense fallback={<AdminSectionSkeleton />}>
+      <EditProduct params={params} searchParams={searchParams} />
+    </Suspense>
   );
 }
 
@@ -63,6 +53,7 @@ async function EditProduct({
 
   return (
     <>
+      <AdminBackLink href="/admin/products" label="All products" />
       <div className="flex flex-wrap items-end justify-between gap-4">
         <h2 className="heading">{product.name}</h2>
         <Link href={`/products/${product.slug}`} className="label-caps link shrink-0">

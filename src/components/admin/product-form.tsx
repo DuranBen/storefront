@@ -97,7 +97,9 @@ export function ProductForm({
             </Field>
           ) : (
             <p className="text-body-sm text-muted">
-              Address: <span className="text-ink">/products/{values.slug}</span> (fixed)
+              {/* Not `values`: after a save they're what was submitted, and the
+                  edit form doesn't submit the (fixed) slug. */}
+              Address: <span className="text-ink">/products/{initial.slug}</span> (fixed)
             </p>
           )}
           <div className="grid gap-6 sm:grid-cols-2">

@@ -15,7 +15,7 @@ export function OrderStatus({
   order,
   className = "",
 }: {
-  order: Pick<Order, "status" | "paymentStatus">;
+  order: Pick<Order, "status" | "paymentStatus" | "amountRefundedCents" | "totalCents">;
   className?: string;
 }) {
   const { label, tone } = describeOrderStatus(order);

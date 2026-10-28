@@ -3,11 +3,12 @@
 // twice: duplicate webhooks, retries and races leave the data unchanged.
 
 import "server-only";
-import { and, eq, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import type Stripe from "stripe";
 import { db } from "@/db";
 import { orderItems, orders, stock } from "@/db/schema";
 import type { Cart } from "./cart";
+import { violatedConstraint } from "./db-errors";
 import type { SessionUser } from "./session";
 import { stripe } from "./stripe";
 
@@ -15,14 +16,6 @@ import { stripe } from "./stripe";
 const RESERVATION_MINUTES = 35;
 /** Grace after expires_at before the sweep releases an order the webhook missed. */
 const SWEEP_GRACE_MINUTES = 5;
-
-/** Postgres constraint name behind a (possibly wrapped) driver error. */
-function violatedConstraint(error: unknown): string | undefined {
-  for (let e: unknown = error; e && typeof e === "object"; e = (e as { cause?: unknown }).cause) {
-    const constraint = (e as { constraint?: unknown }).constraint;
-    if (typeof constraint === "string") return constraint;
-  }
-}
 
 /**
  * Create a pending order for the cart and reserve its stock, all or nothing:
@@ -73,8 +66,13 @@ export async function reserveOrder(user: SessionUser, cart: Cart) {
       ),
     ]);
   } catch (error) {
-    if (violatedConstraint(error) === "stock_quantity_check") {
+    const constraint = violatedConstraint(error);
+    if (constraint === "stock_quantity_check") {
       return { ok: false as const, reason: "sold_out" as const };
+    }
+    // Another checkout for this customer is open (e.g. started in another tab).
+    if (constraint === "orders_one_open_checkout_per_user_idx") {
+      return { ok: false as const, reason: "in_progress" as const };
     }
     throw error;
   }
@@ -82,8 +80,25 @@ export async function reserveOrder(user: SessionUser, cart: Cart) {
   return { ok: true as const, order: { id, expiresAt, totalCents } };
 }
 
+/**
+ * Record the order's Checkout Session, only while the order is still open.
+ * False means a concurrent checkout closed it first: the session must not be
+ * handed out.
+ */
 export async function attachCheckoutSession(orderId: string, sessionId: string) {
-  await db.update(orders).set({ stripeCheckoutSessionId: sessionId }).where(eq(orders.id, orderId));
+  const attached = await db
+    .update(orders)
+    .set({ stripeCheckoutSessionId: sessionId })
+    .where(
+      and(
+        eq(orders.id, orderId),
+        eq(orders.status, "pending"),
+        eq(orders.paymentStatus, "unpaid"),
+        isNull(orders.stockReleasedAt),
+      ),
+    )
+    .returning({ id: orders.id });
+  return attached.length > 0;
 }
 
 type ReleaseOutcome = "expired" | "canceled" | "payment_failed";
@@ -92,11 +107,22 @@ type ReleaseOutcome = "expired" | "canceled" | "payment_failed";
  * Return an unpaid order's reserved stock and close it. One statement: the
  * order update only matches an open, unreleased order, and the stock update
  * only runs for the row it returned, so stock comes back exactly once.
+ *
+ * With `sessionId`, it only releases if the order's session is still that one
+ * (null: none attached yet), so a session attached since it was read is never
+ * left payable for released stock.
  */
-export async function releaseOrder(orderId: string, outcome: ReleaseOutcome) {
+export async function releaseOrder(
+  orderId: string,
+  outcome: ReleaseOutcome,
+  options?: { sessionId: string | null },
+) {
   const status = outcome === "expired" ? "expired" : "canceled";
   const payment =
     outcome === "payment_failed" ? sql`'failed'::payment_status` : sql`payment_status`;
+  const sameSession = options
+    ? sql`AND stripe_checkout_session_id IS NOT DISTINCT FROM ${options.sessionId}::text`
+    : sql``;
 
   const result = await db.execute(sql`
     WITH released AS (
@@ -105,6 +131,7 @@ export async function releaseOrder(orderId: string, outcome: ReleaseOutcome) {
           stock_released_at = now(), updated_at = now()
       WHERE id = ${orderId} AND status = 'pending'
         AND payment_status IN ('unpaid', 'processing') AND stock_released_at IS NULL
+        ${sameSession}
       RETURNING id
     )
     UPDATE stock SET quantity = stock.quantity + i.quantity, updated_at = now()
@@ -116,11 +143,13 @@ export async function releaseOrder(orderId: string, outcome: ReleaseOutcome) {
 
 /**
  * Release orders whose reservation lapsed without the expiry webhook arriving.
- * Returns how many released stock.
+ * Each is closed through Stripe first (closeOpenOrder), so an order that was
+ * paid while its webhook is delayed keeps its stock. Returns how many
+ * released stock.
  */
 export async function releaseOverdueReservations() {
   const overdue = await db
-    .select({ id: orders.id })
+    .select({ id: orders.id, stripeCheckoutSessionId: orders.stripeCheckoutSessionId })
     .from(orders)
     .where(
       and(
@@ -131,29 +160,44 @@ export async function releaseOverdueReservations() {
     )
     .limit(50);
   let released = 0;
-  for (const { id } of overdue) if (await releaseOrder(id, "expired")) released++;
+  for (const order of overdue) {
+    try {
+      if ((await closeOpenOrder(order, "expired")) === "released") released++;
+    } catch (error) {
+      // Stripe unreachable: leave it for the webhook or the next sweep.
+      console.error(`[checkout] Couldn't sweep order ${order.id}`, error);
+    }
+  }
   return released;
 }
 
 /**
- * Close one of the customer's open orders: expire its Stripe session first,
- * so it can no longer be paid, then release the stock. If the session has
- * already completed, the payment stands and nothing is released. "canceled"
- * means stock was returned; "unchanged" that it had been already.
+ * Close an open order: expire its Stripe session first, so it can no longer
+ * be paid, then release the stock. If the session has already completed,
+ * the payment stands and nothing is released ("completed"). "released" means
+ * stock was returned; "unchanged" that it had been already. Throws if Stripe
+ * can't be reached or the session couldn't be expired.
  */
-export async function cancelOpenOrder(order: {
-  id: string;
-  stripeCheckoutSessionId: string | null;
-}) {
+export async function closeOpenOrder(
+  order: { id: string; stripeCheckoutSessionId: string | null },
+  outcome: "canceled" | "expired" = "canceled",
+) {
   if (order.stripeCheckoutSessionId) {
     try {
       await stripe().checkout.sessions.expire(order.stripeCheckoutSessionId);
-    } catch {
+    } catch (error) {
+      // Expiring fails for a session that's no longer open: find out why.
       const session = await stripe().checkout.sessions.retrieve(order.stripeCheckoutSessionId);
-      if (session.status !== "expired") return "completed" as const;
+      if (session.status === "complete") return "completed" as const;
+      if (session.status !== "expired") throw error;
     }
   }
-  return (await releaseOrder(order.id, "canceled")) ? ("canceled" as const) : ("unchanged" as const);
+  // Only if no session was attached since `order` was read (a checkout still
+  // being created in another tab has none yet; once attached, it's payable).
+  const released = await releaseOrder(order.id, outcome, {
+    sessionId: order.stripeCheckoutSessionId,
+  });
+  return released ? ("released" as const) : ("unchanged" as const);
 }
 
 /** The customer's pending, unpaid orders (an abandoned earlier checkout). */
@@ -196,8 +240,15 @@ export async function markPaid(session: Stripe.Checkout.Session) {
 
   // We created the session from this order's totals; anything else is wrong.
   if (session.amount_total !== order.totalCents || session.currency !== order.currency) {
+    // Money was taken, so record it, but don't confirm. A paid order is never
+    // released or swept, so it keeps its stock, and the customer is told
+    // their payment was received and needs follow-up rather than "no payment".
+    await db
+      .update(orders)
+      .set({ paymentStatus: "paid", paidAt: new Date(), stripePaymentIntentId: paymentIntentId(session) })
+      .where(and(eq(orders.id, order.id), inArray(orders.paymentStatus, ["unpaid", "processing"])));
     console.error(
-      `[checkout] Amount mismatch for order ${order.id}: Stripe ${session.amount_total} ${session.currency}, order ${order.totalCents} ${order.currency}. Not confirming.`,
+      `[checkout] Amount mismatch for order ${order.id}: Stripe ${session.amount_total} ${session.currency}, order ${order.totalCents} ${order.currency}. Recorded as paid, not confirmed. Needs a refund or manual fulfilment.`,
     );
     return "amount_mismatch" as const;
   }
@@ -245,6 +296,49 @@ export async function markPaid(session: Stripe.Checkout.Session) {
     `[checkout] Order ${order.id} was paid after its stock was released. Needs a refund or manual fulfilment.`,
   );
   return "paid_after_release" as const;
+}
+
+const intentId = (intent: string | Stripe.PaymentIntent | null) =>
+  typeof intent === "string" ? intent : (intent?.id ?? null);
+
+/**
+ * A refund (made in the Stripe Dashboard) on an order's payment. The charge
+ * carries the total refunded so far, so this sets that total rather than
+ * adding to it, and never lowers it: redelivered or out-of-order events are
+ * harmless. Capped at the order total (an amount-mismatch charge can exceed it).
+ */
+export async function recordRefund(charge: Stripe.Charge) {
+  const intent = intentId(charge.payment_intent);
+  if (!intent) return "unknown_order" as const;
+  const [order] = await db
+    .update(orders)
+    .set({
+      amountRefundedCents: sql`greatest(${orders.amountRefundedCents}, least(${charge.amount_refunded}, ${orders.totalCents}))`,
+    })
+    .where(eq(orders.stripePaymentIntentId, intent))
+    .returning({ id: orders.id });
+  return order ? ("refund_recorded" as const) : ("unknown_order" as const);
+}
+
+/**
+ * A dispute (chargeback) on an order's payment: keep Stripe's latest status.
+ * `eventCreated` orders the events, so an older one arriving late is ignored.
+ */
+export async function recordDispute(dispute: Stripe.Dispute, eventCreated: number) {
+  const intent = intentId(dispute.payment_intent);
+  if (!intent) return "unknown_order" as const;
+  const at = new Date(eventCreated * 1000);
+  const [order] = await db
+    .update(orders)
+    .set({ disputeStatus: dispute.status, disputeUpdatedAt: at })
+    .where(
+      and(
+        eq(orders.stripePaymentIntentId, intent),
+        or(isNull(orders.disputeUpdatedAt), lte(orders.disputeUpdatedAt, at)),
+      ),
+    )
+    .returning({ id: orders.id });
+  return order ? ("dispute_recorded" as const) : ("unchanged" as const);
 }
 
 /** A delayed payment method: the session completed but the money hasn't arrived. */

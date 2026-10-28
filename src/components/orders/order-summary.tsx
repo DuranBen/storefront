@@ -24,7 +24,13 @@ type ShippingDetails = {
  * the order (snapshots, not current catalogue data). Shared by the checkout
  * confirmation and the account's order pages.
  */
-export function OrderSummary({ order }: { order: Order & { items: OrderItem[] } }) {
+export function OrderSummary({
+  order,
+  itemsHeading = "Your order",
+}: {
+  order: Order & { items: OrderItem[] };
+  itemsHeading?: string;
+}) {
   const shipping = order.shipping as ShippingDetails | null;
 
   return (
@@ -59,7 +65,7 @@ export function OrderSummary({ order }: { order: Order & { items: OrderItem[] } 
 
       <section aria-labelledby="order-items" className="mt-12">
         <h2 id="order-items" className="label-caps">
-          Your order
+          {itemsHeading}
         </h2>
         <ul className="mt-4 hairline-t">
           {order.items.map((item) => (
@@ -100,6 +106,12 @@ export function OrderSummary({ order }: { order: Order & { items: OrderItem[] } 
             <dt>{order.status === "confirmed" ? "Total paid" : "Total"}</dt>
             <dd>{money(order.totalCents)}</dd>
           </div>
+          {order.amountRefundedCents > 0 && (
+            <div className="flex justify-between gap-4 text-body-sm text-muted">
+              <dt>Refunded</dt>
+              <dd>−{money(order.amountRefundedCents)}</dd>
+            </div>
+          )}
         </dl>
       </section>
 

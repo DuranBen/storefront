@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Bodoni_Moda, Geist } from "next/font/google";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { WishlistProvider } from "@/components/wishlist-provider";
 import "./globals.css";
 
 // UI and body copy.
@@ -33,9 +34,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${bodoniModa.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <SiteHeader />
-        {children}
-        <SiteFooter />
+        <WishlistProvider>
+          <SiteHeader />
+          {children}
+          <SiteFooter />
+        </WishlistProvider>
       </body>
     </html>
   );

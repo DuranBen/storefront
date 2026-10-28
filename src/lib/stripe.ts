@@ -16,6 +16,11 @@ export function stripe() {
   return client;
 }
 
+/** Whether checkout runs in live mode, going by the key (sk_live_… / rk_live_…). */
+export function isLiveMode() {
+  return /^(sk|rk)_live_/.test(process.env.STRIPE_SECRET_KEY ?? "");
+}
+
 export function webhookSecret() {
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!secret) throw new Error("STRIPE_WEBHOOK_SECRET is not set");

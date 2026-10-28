@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
 import { requireAdmin } from "@/lib/session";
+import { ArrowLeftIcon } from "../icons";
 import { AdminNav, AdminNavLinks } from "./admin-nav";
 
 /**
@@ -52,29 +54,45 @@ export function AdminShellSkeleton() {
 
 /**
  * A section's heading and content, gated by its own requireAdmin() call.
- * Each admin page renders this inside <Suspense>.
+ * Each admin page renders this inside <Suspense>. Put every piece of admin
+ * UI inside it (or after another requireAdmin() call): a page renders apart
+ * from its layout, so anything outside is sent to non-admins too.
  */
 export async function AdminSection({
   path,
   title,
   actions,
+  back,
   children,
 }: {
   path: string;
   title: string;
   /** Shown beside the heading, e.g. a "New product" link. */
   actions?: ReactNode;
+  /** A link back to the parent list, above the heading. */
+  back?: { href: string; label: string };
   children: ReactNode;
 }) {
   await requireAdmin(path);
   return (
     <>
+      {back && <AdminBackLink {...back} />}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <h2 className="heading">{title}</h2>
         {actions}
       </div>
       {children}
     </>
+  );
+}
+
+/** "← All products": render only after the admin check (see AdminSection). */
+export function AdminBackLink({ href, label }: { href: string; label: string }) {
+  return (
+    <Link href={href} className="label-caps link-quiet mb-6 inline-flex items-center gap-2">
+      <ArrowLeftIcon width={16} height={16} />
+      {label}
+    </Link>
   );
 }
 

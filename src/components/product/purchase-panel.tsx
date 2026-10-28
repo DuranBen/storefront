@@ -6,13 +6,14 @@ import { addToCart, type AddToCartResult } from "@/lib/cart-actions";
 import { notifyCartChange } from "@/lib/cart-cookie";
 import { LOW_STOCK_THRESHOLD, stockState, type Product } from "@/lib/catalog";
 import { HeartIcon } from "../icons";
+import { useWishlistToggle } from "../wishlist-button";
 import { StockStatus } from "./stock-status";
 
 /**
  * Size selection, stock state and the bag / wishlist actions. Adding goes
  * through the addToCart Server Action, which checks live stock; the stock
  * shown here comes from the cached product and can be a few minutes old.
- * The wishlist is still front-end only.
+ * The wishlist button saves to the customer's wishlist, like the card heart.
  */
 export function PurchasePanel({
   slug,
@@ -30,7 +31,7 @@ export function PurchasePanel({
   const [result, setResult] = useState<AddToCartResult | null>(null);
   const [adding, startAdding] = useTransition();
   const [notify, setNotify] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const wishlist = useWishlistToggle(slug);
 
   const selected = sizes?.find((s) => s.label === size);
   const totalUnits = sizes ? sizes.reduce((sum, s) => sum + s.stock, 0) : stock;
@@ -150,12 +151,13 @@ export function PurchasePanel({
 
         <button
           type="button"
-          aria-pressed={saved}
-          onClick={() => setSaved((s) => !s)}
+          aria-pressed={wishlist.isSaved}
+          aria-busy={wishlist.pending || undefined}
+          onClick={wishlist.toggle}
           className="btn btn-secondary w-full"
         >
-          <HeartIcon width={16} height={16} fill={saved ? "currentColor" : "none"} />
-          {saved ? "Saved to wishlist" : "Add to wishlist"}
+          <HeartIcon width={16} height={16} fill={wishlist.isSaved ? "currentColor" : "none"} />
+          {wishlist.isSaved ? "Saved to wishlist" : "Add to wishlist"}
         </button>
       </div>
 

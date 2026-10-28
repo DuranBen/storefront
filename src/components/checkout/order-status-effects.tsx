@@ -3,13 +3,22 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { syncCartCount } from "@/lib/cart-cookie";
-import { clearCartForOrder } from "@/lib/checkout-actions";
+import { settleBag } from "@/lib/checkout-actions";
 
-/** Empties the bag once the order is confirmed (the server re-checks that). */
-export function ClearCartOnConfirm({ sessionId }: { sessionId: string }) {
+/**
+ * Takes a paid checkout's pieces out of the bag (the server checks the
+ * order). On the confirmation page, and on the bag for shoppers who never
+ * reached it; `refresh` re-renders a page that shows the bag.
+ */
+export function SettleBag({ refresh = false }: { refresh?: boolean }) {
+  const router = useRouter();
   useEffect(() => {
-    clearCartForOrder(sessionId).then(() => syncCartCount(0));
-  }, [sessionId]);
+    settleBag().then((count) => {
+      if (count === undefined) return;
+      syncCartCount(count);
+      if (refresh) router.refresh();
+    });
+  }, [router, refresh]);
   return null;
 }
 

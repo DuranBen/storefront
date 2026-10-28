@@ -23,6 +23,9 @@ const statusNotes: Partial<Record<OrderStatusKey, string>> = {
   failed: "The payment didn't go through, so this order wasn't placed and no money was taken.",
   review:
     "We received your payment but couldn't complete this order. We'll be in touch about a refund.",
+  refunded: "This order has been refunded in full. Refunds can take 5–10 days to reach your account.",
+  partially_refunded:
+    "Part of this order has been refunded. Refunds can take 5–10 days to reach your account.",
 };
 
 // The order id and session are request data, so they're read inside Suspense.

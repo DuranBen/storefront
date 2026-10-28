@@ -2,15 +2,23 @@ import { getSessionCookie } from "better-auth/cookies";
 import { eq } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/db";
-import { products } from "@/db/schema";
+import { categories, products } from "@/db/schema";
+import { collectionPages } from "@/lib/catalog";
 
 export const config = {
-  matcher: ["/products/:slug", "/account/:path*", "/admin/:path*"],
+  matcher: [
+    "/products/:slug",
+    "/collections/:slug",
+    "/account/:path*",
+    "/admin/:path*",
+    "/wishlist",
+  ],
 };
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   if (pathname.startsWith("/products/")) return rejectUnknownProduct(request);
+  if (pathname.startsWith("/collections/")) return rejectUnknownCollection(request);
   return requireSessionCookie(request);
 }
 
@@ -32,6 +40,21 @@ async function rejectUnknownProduct(request: NextRequest) {
     // No route matches this path, so Next renders the not-found page with a 404.
     return NextResponse.rewrite(new URL("/products-not-found", request.url));
   }
+}
+
+/**
+ * The same for collection pages: an editorial collection (a static list) or
+ * a category, else a real 404.
+ */
+async function rejectUnknownCollection(request: NextRequest) {
+  const slug = request.nextUrl.pathname.split("/")[2];
+  if (collectionPages.some((c) => c.slug === slug)) return;
+  const [found] = await db
+    .select({ id: categories.id })
+    .from(categories)
+    .where(eq(categories.slug, slug))
+    .limit(1);
+  if (!found) return NextResponse.rewrite(new URL("/collections-not-found", request.url));
 }
 
 /**
