@@ -24,6 +24,8 @@
   --color-line-strong: #111111;
   --color-sale: #a8231b;
   --color-success: #2f6a3f;
+  /* Fixed dark surface (footer, type on photos): the same in both themes. */
+  --color-night: #111111;
 
   /* Type families (values come from next/font, see the inline block below). */
   --font-*: initial;

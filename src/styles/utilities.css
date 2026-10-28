@@ -7,8 +7,10 @@
  * header-overlay: — applies while the page has a section marked
  * `data-header-overlay` (e.g. a full-bleed hero) and the header
  * hasn't scrolled yet, so it can sit transparently over the image.
+ * Only a visible section counts: after client-side navigation the router
+ * keeps the previous page in the DOM, hidden with an inline display: none.
  */
-@custom-variant header-overlay (body:has([data-header-overlay]) &:not([data-scrolled]));
+@custom-variant header-overlay (body:has([data-header-overlay]:not([style*="display: none"], [style*="display: none"] *)) &:not([data-scrolled]));
 
 /* ---------- Layout ---------- */
 
@@ -291,14 +293,15 @@
 
 /* For use on dark imagery or ink sections. */
 @utility btn-inverse {
-  background-color: var(--color-paper);
-  border-color: var(--color-paper);
-  color: var(--color-ink);
+  /* Fixed colours: these sit on photos and the footer in both themes. */
+  background-color: var(--color-white);
+  border-color: var(--color-white);
+  color: var(--color-night);
 
   @variant hover {
     &:not(:disabled, [aria-disabled="true"]) {
       background-color: transparent;
-      color: var(--color-paper);
+      color: var(--color-white);
     }
   }
 }
@@ -306,13 +309,13 @@
 /* Hairline white outline — secondary action on dark imagery. */
 @utility btn-secondary-inverse {
   background-color: transparent;
-  border-color: var(--color-paper);
-  color: var(--color-paper);
+  border-color: var(--color-white);
+  color: var(--color-white);
 
   @variant hover {
     &:not(:disabled, [aria-disabled="true"]) {
-      background-color: var(--color-paper);
-      color: var(--color-ink);
+      background-color: var(--color-white);
+      color: var(--color-night);
     }
   }
 }

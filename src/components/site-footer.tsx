@@ -38,7 +38,7 @@ const legal = [
 
 export function SiteFooter() {
   return (
-    <footer className="bg-ink text-paper">
+    <footer className="border-t border-white/10 bg-night text-white [&_:focus-visible]:outline-white">
       <div className="container-page section-sm grid gap-12 lg:grid-cols-12">
         <div className="lg:col-span-5">
           <h2 className="heading">Letters from the atelier</h2>

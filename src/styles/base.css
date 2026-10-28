@@ -5,6 +5,25 @@
     color-scheme: light;
   }
 
+  /*
+   * Dark theme: the same tokens, redefined. Set on <html> before first paint
+   * by the script in the root layout (saved choice, else the system setting).
+   * Photography overlays and the footer use fixed colours (white, night).
+   */
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --color-paper: #121212;
+    --color-canvas: #1d1c1b;
+    --color-ink: #f2f1ef;
+    --color-ink-hover: #d6d4d0;
+    --color-muted: #a8a6a2; /* 7.7:1 on paper */
+    --color-subtle: #6e6c69;
+    --color-line: #2c2b2a;
+    --color-line-strong: #f2f1ef;
+    --color-sale: #ef7b70;
+    --color-success: #6cc08a;
+  }
+
   @variant lg {
     :root {
       --spacing-header: 4rem;

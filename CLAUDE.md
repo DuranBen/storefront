@@ -49,6 +49,12 @@ The App Router guides are in `node_modules/next/dist/docs/01-app/`. `cacheCompon
 - Release functions report whether stock actually moved; revalidate only then.
 - Per-user state on cached pages (wishlist hearts) is loaded on the client (`WishlistProvider`), not rendered into them.
 
+## Styling
+
+- Light and dark themes share the colour tokens in `src/styles/theme.css`; dark values are redefined under `:root[data-theme="dark"]` in `base.css`. The `<head>` script in the root layout sets `data-theme` before first paint (saved choice, else the system setting). Use the tokens, never raw colours, so both themes work.
+- Surfaces that stay dark in both themes (the footer, type and buttons on photos) use the fixed `white` / `night` colours, not `paper` / `ink`, which swap.
+- The router keeps previous pages in the DOM hidden with an inline `display: none`; CSS that reacts to page content (like the `header-overlay` variant) must ignore hidden pages.
+
 ## Content
 
 - The content pages (`/about`, `/client-services`, `/legal`, `/stores`, `/appointments`, `/careers`) are **draft copy to review before launch** (privacy and terms need legal review). Contact details and stores are placeholders in `contact` and `stores` in `src/lib/catalog.ts`.

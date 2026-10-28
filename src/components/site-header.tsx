@@ -12,6 +12,7 @@ import {
   SearchIcon,
   UserIcon,
 } from "./icons";
+import { ThemeToggle } from "./theme-toggle";
 
 function subscribeToCart(onChange: () => void) {
   window.addEventListener(CART_CHANGE_EVENT, onChange);
@@ -91,6 +92,8 @@ export function SiteHeader() {
             <Link href="/search" aria-label="Search" className="btn-icon md:hidden">
               <SearchIcon />
             </Link>
+            {/* On small screens it's in the menu, where there's room. */}
+            <ThemeToggle className="btn-icon hidden md:inline-flex" />
             <Link href="/account" aria-label="Account" className="btn-icon hidden md:inline-flex">
               <UserIcon />
             </Link>
@@ -110,7 +113,7 @@ export function SiteHeader() {
               {cartCount > 0 && (
                 <span
                   aria-hidden="true"
-                  className="absolute top-1.5 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-ink px-1 text-[0.625rem] leading-none text-paper tabular-nums header-overlay:bg-white header-overlay:text-ink"
+                  className="absolute top-1.5 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-ink px-1 text-[0.625rem] leading-none text-paper tabular-nums header-overlay:bg-white header-overlay:text-night"
                 >
                   {cartCount > 99 ? "99+" : cartCount}
                 </span>
@@ -160,6 +163,9 @@ export function SiteHeader() {
                   </Link>
                 </li>
               ))}
+              <li>
+                <ThemeToggle withLabel className="link-quiet -ml-0.5 inline-flex items-center gap-3" />
+              </li>
             </ul>
           </nav>
         </div>

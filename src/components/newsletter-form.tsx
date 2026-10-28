@@ -33,7 +33,7 @@ export function NewsletterForm() {
           placeholder="Email address"
           aria-invalid={state.status === "invalid" || undefined}
           aria-describedby={state.status === "invalid" ? "newsletter-error" : undefined}
-          className="field border-white/30 bg-transparent text-paper placeholder:text-white/50 focus:border-paper"
+          className="field border-white/30 bg-transparent text-white placeholder:text-white/50 focus:border-white"
         />
         <button type="submit" disabled={pending} className="btn btn-inverse shrink-0">
           Subscribe

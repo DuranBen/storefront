@@ -61,6 +61,13 @@ export default function CookiesPage() {
           </table>
         </div>
       </ContentSection>
+      <ContentSection title="Other storage">
+        <p>
+          If you switch between light and dark mode, your choice is saved in your browser&rsquo;s
+          local storage (as <code className="font-mono text-caption text-ink">theme</code>) so
+          every page uses it. It never leaves your device.
+        </p>
+      </ContentSection>
       <ContentSection title="Your choices">
         <p>
           Because these cookies are needed for signing in and for your bag, the shop won&rsquo;t
